@@ -60,6 +60,7 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
   align-items: center; justify-content: center; gap: 1px;
   cursor: pointer; transition: background 0.12s, border-color 0.12s; user-select: none;
 }
+.kana-spacer { width: 60px; visibility: hidden; pointer-events: none; }
 .kana-cell:hover { background: #ffebee; border-color: #c62828; }
 .kana-cell.flash { background: #c62828; border-color: #c62828; }
 .kana-cell.flash .kana-ro { color: #ffcdd2; }
@@ -189,7 +190,9 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 
   /* Sound chart — fit more cells per row */
   .kana-grid { gap: 4px; }
-  .kana-cell { width: calc((100% - 24px) / 6); min-width: 48px; min-height: 50px; }
+  .kana-cell,
+  .kana-spacer { width: calc((100% - 24px) / 6); min-width: 48px; }
+  .kana-cell { min-height: 50px; }
   .kana-char { font-size: 1.25rem; }
   .chart-group-hdr h3 { font-size: 0.78rem; }
   .play-all-btn { font-size: 0.7rem; padding: 3px 9px; }
@@ -734,7 +737,7 @@ chartData.forEach(group => {
     row.sounds.forEach(s => {
       const cell = document.createElement('div');
       if (!s) {
-        cell.style.width = '60px'; // spacer
+        cell.className = 'kana-spacer'; // invisible filler — matches real cell width
       } else {
         cell.className = 'kana-cell' + (row.highlight ? ' ra-highlight' : '');
         if (group.katakana) cell.style.borderColor = '#90caf9';
