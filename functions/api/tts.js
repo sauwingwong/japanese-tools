@@ -1,14 +1,13 @@
 // Cloudflare Pages Function — Gemini TTS proxy
 // Keeps GEMINI_API_KEY server-side (set as a Pages environment secret).
 //
-// Model: gemini-2.5-flash-preview-tts
-// Switch to 'gemini-3.1-flash-tts-preview' once rate limits are relaxed
-// (currently 3 req/min on the 3.1 preview).
+// Model: gemini-3.1-flash-tts-preview (upgraded 2026-04-17 after enabling paid tier)
+// Fall back to 'gemini-2.5-flash-preview-tts' if 3.1 throws quota errors.
 //
 // Returns: { audio: <base64 PCM string> }
 // Audio spec: 16-bit signed PCM, 24 kHz, mono
 
-const TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+const TTS_MODEL = 'gemini-3.1-flash-tts-preview';
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent`;
 
 // Voice to use. Kore = calm female, good for Japanese.
