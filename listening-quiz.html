@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Japanese Listening Quiz</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4ff; color: #222; min-height: 100vh; }
+
+header {
+  background: #1a237e; color: white; padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+header h1 { font-size: 1.3rem; font-weight: 600; }
+#voice-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+#voice-select { padding: 4px 8px; border-radius: 4px; border: none; font-size: 0.82rem; max-width: 210px; }
+
+.container { max-width: 720px; margin: 0 auto; padding: 20px 14px; }
+
+/* Category filter */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.cat-btn {
+  padding: 5px 14px; border-radius: 20px; border: 1.5px solid #9fa8da;
+  background: white; font-size: 0.82rem; cursor: pointer; transition: all 0.12s; color: #3949ab;
+}
+.cat-btn.active { background: #1a237e; color: white; border-color: #1a237e; }
+.cat-btn:hover:not(.active) { background: #e8eaf6; }
+
+/* Score bar */
+#score-bar {
+  background: white; border-radius: 10px; padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin-bottom: 18px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+.score-nums { font-size: 1.1rem; font-weight: 600; color: #1a237e; }
+.score-sub { font-size: 0.78rem; color: #888; }
+.streak { font-size: 0.9rem; color: #e65100; font-weight: 600; }
+#progress-bar {
+  width: 100%; height: 6px; background: #e8eaf6; border-radius: 3px; margin-top: 6px; overflow: hidden;
+}
+#progress-fill { height: 100%; background: #3949ab; border-radius: 3px; transition: width 0.3s; width: 0; }
+
+/* Quiz card */
+#quiz-card {
+  background: white; border-radius: 14px; padding: 30px 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 18px; text-align: center;
+}
+#play-btn {
+  width: 80px; height: 80px; border-radius: 50%; background: #1a237e; color: white;
+  border: none; font-size: 2.2rem; cursor: pointer; margin: 0 auto 8px;
+  display: flex; align-items: center; justify-content: center; transition: background 0.12s, transform 0.12s;
+}
+#play-btn:hover { background: #0d1b6e; transform: scale(1.05); }
+#play-slow {
+  background: none; border: 1px solid #9fa8da; color: #3949ab;
+  padding: 4px 12px; border-radius: 14px; font-size: 0.78rem; cursor: pointer;
+  margin-bottom: 22px; transition: background 0.12s;
+}
+#play-slow:hover { background: #e8eaf6; }
+
+#options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 420px; margin: 0 auto; }
+.opt {
+  background: white; border: 2px solid #c5cae9; border-radius: 10px;
+  padding: 14px 8px; font-size: 1.3rem; cursor: pointer; transition: all 0.12s; line-height: 1.2;
+}
+.opt:hover:not(:disabled) { border-color: #1a237e; background: #e8eaf6; }
+.opt.correct { border-color: #2e7d32 !important; background: #e8f5e9 !important; color: #2e7d32; }
+.opt.wrong   { border-color: #c62828 !important; background: #ffebee !important; color: #c62828; }
+.opt .opt-meaning { display: block; font-size: 0.68rem; color: #aaa; margin-top: 3px; }
+
+/* Answer reveal */
+#reveal {
+  margin-top: 18px; padding: 14px; background: #f3f4ff; border-radius: 8px;
+  border: 1px solid #c5cae9; display: none; text-align: left;
+}
+#reveal .rv-word { font-size: 1.3rem; font-weight: 600; margin-bottom: 4px; }
+#reveal .rv-row { font-size: 0.85rem; color: #555; margin-bottom: 2px; }
+#reveal .rv-pitch { margin-top: 8px; }
+#reveal .pitch-label { font-size: 0.72rem; color: #888; margin-bottom: 4px; }
+.rv-pd { display: flex; align-items: flex-end; gap: 5px; height: 44px; }
+.rv-pm { display: flex; flex-direction: column; align-items: center; }
+.rv-pm.hi { justify-content: flex-end; }
+.rv-pm.lo { justify-content: flex-end; padding-top: 18px; }
+.rv-pm-box {
+  width: 28px; height: 24px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+}
+.rv-pm.hi .rv-pm-box { background: #7b1fa2; color: white; }
+.rv-pm.lo .rv-pm-box { background: #e0e0e0; color: #555; }
+
+#feedback-text { font-size: 1rem; font-weight: 500; min-height: 24px; margin-top: 12px; }
+
+/* Buttons */
+#next-btn {
+  display: none; margin: 0 auto; padding: 11px 28px; background: #1a237e; color: white;
+  border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.12s;
+}
+#next-btn:hover { background: #0d1b6e; }
+.btn { padding: 8px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+.btn-outline { background: white; color: #1a237e; border: 1.5px solid #9fa8da; }
+.btn-outline:hover { background: #e8eaf6; }
+
+/* End screen */
+#end-screen {
+  display: none; background: white; border-radius: 14px; padding: 32px 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08); text-align: center;
+}
+#end-screen h2 { font-size: 1.4rem; margin-bottom: 8px; color: #1a237e; }
+#end-summary { font-size: 0.95rem; color: #555; margin-bottom: 20px; line-height: 1.7; }
+#review-list { text-align: left; margin-bottom: 20px; }
+#review-list h3 { font-size: 0.9rem; color: #888; margin-bottom: 8px; }
+.review-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem;
+}
+.review-item span.rw { font-size: 1.1rem; min-width: 60px; }
+
+#speak-try-btn {
+  background: white; border: 1.5px solid #9fa8da; color: #3949ab;
+  padding: 6px 18px; border-radius: 20px; font-size: 0.85rem; cursor: pointer;
+  transition: all 0.12s;
+}
+#speak-try-btn:hover:not(:disabled) { background: #e8eaf6; }
+#speak-try-btn.listening { background: #ffebee; border-color: #c62828; color: #c62828; }
+#speak-try-btn:disabled { opacity: 0.45; cursor: default; }
+.sr-exact   { color: #2e7d32; font-weight: 600; }
+.sr-close   { color: #e65100; font-weight: 600; }
+.sr-partial { color: #bf360c; font-weight: 600; }
+.sr-miss    { color: #b71c1c; font-weight: 600; }
+
+@media (max-width: 500px) {
+  #options-grid { grid-template-columns: 1fr 1fr; }
+  .opt { font-size: 1.1rem; padding: 10px 6px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎧 Japanese Listening Quiz</h1>
+  <div id="voice-row">
+    <label for="voice-select">Voice:</label>
+    <select id="voice-select"></select>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="filter-bar" id="filter-bar">
+    <button class="cat-btn active" data-cat="all">All</button>
+    <button class="cat-btn" data-cat="greeting">Greetings</button>
+    <button class="cat-btn" data-cat="time">Time</button>
+    <button class="cat-btn" data-cat="verb">Verbs</button>
+    <button class="cat-btn" data-cat="adj">Adjectives</button>
+    <button class="cat-btn" data-cat="noun">Nouns</button>
+  </div>
+
+  <div id="score-bar">
+    <div>
+      <div class="score-nums">
+        <span id="sc-correct">0</span> / <span id="sc-total">0</span>
+        <span style="font-size:0.75rem; font-weight:400; color:#888; margin-left:6px;" id="sc-pct"></span>
+      </div>
+      <div class="score-sub">Words seen: <span id="sc-seen">0</span> / <span id="sc-pool">0</span></div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <span class="streak" id="sc-streak"></span>
+      <button class="btn btn-outline" id="reset-btn">Reset</button>
+    </div>
+    <div id="progress-bar" style="flex-basis:100%;"><div id="progress-fill"></div></div>
+  </div>
+
+  <div id="quiz-card">
+    <button id="play-btn" title="Play word">▶</button>
+    <button id="play-slow">🐢 Play slower</button>
+    <div id="options-grid"></div>
+    <div id="speak-section" style="margin-top:14px; text-align:center;">
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:6px;">
+        <button id="speak-try-btn" title="Say the word aloud and check your pronunciation">🎤 Say it aloud</button>
+        <button id="play-sentence-btn" style="background:#f3e5f5; border:1px solid #ce93d8; border-radius:20px; padding:5px 14px; font-size:0.82rem; cursor:pointer; color:#4a148c;" title="Hear the word in a sentence — pitch is more natural in context">▶ In sentence</button>
+      </div>
+      <div id="speak-result" style="margin-top:4px; min-height:36px; font-size:0.88rem;"></div>
+    </div>
+    <div id="feedback-text"></div>
+    <div id="reveal"></div>
+    <button id="next-btn">Next →</button>
+  </div>
+
+  <div id="end-screen">
+    <h2 id="end-title">Session Complete!</h2>
+    <div id="end-summary"></div>
+    <div id="review-list"></div>
+    <button class="btn" style="background:#1a237e; color:white; padding:11px 24px;" id="restart-btn">Start Again</button>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// VOCABULARY DATA  (hiragana, kanji, english, category, pitch pattern)
+// pitch: array of 0/1 per mora; null = unknown/skip display
+// ═══════════════════════════════════════════════════════════════════════
+const VOCAB = [
+  // ── Greetings ──
+  { h:'おはよう',       k:'お早う',       e:'Good morning (casual)',       cat:'greeting', p:null,    s:'おはよう、元気ですか。' },
+  { h:'おはようございます', k:'お早うございます', e:'Good morning (polite)', cat:'greeting', p:null,  s:'先生、おはようございます。' },
+  { h:'こんにちは',     k:'今日は',       e:'Hello / Good afternoon',      cat:'greeting', p:null,    s:'こんにちは、お元気ですか。' },
+  { h:'こんばんは',     k:'今晩は',       e:'Good evening',                cat:'greeting', p:null,    s:'こんばんは、今夜はいい天気ですね。' },
+  { h:'おやすみなさい', k:'お休みなさい', e:'Good night',                  cat:'greeting', p:null,    s:'では、おやすみなさい。' },
+  { h:'ありがとう',     k:'有難う',       e:'Thank you (casual)',          cat:'greeting', p:null,    s:'助けてくれて、ありがとう。' },
+  { h:'ありがとうございます', k:'有難うございます', e:'Thank you (polite)', cat:'greeting', p:null,   s:'いつもお世話になり、ありがとうございます。' },
+  { h:'すみません',     k:'済みません',   e:'Excuse me / Sorry',           cat:'greeting', p:null,    s:'すみません、道を教えてください。' },
+  { h:'はい',          k:'はい',         e:'Yes',                         cat:'greeting', p:[1,0],    s:'はい、わかりました。' },
+  { h:'いいえ',        k:'いいえ',       e:'No',                          cat:'greeting', p:[1,0,0],  s:'いいえ、結構です。' },
+  { h:'どうぞ',        k:'どうぞ',       e:'Please / Go ahead',           cat:'greeting', p:[1,0,0],  s:'どうぞ、お入りください。' },
+  { h:'ただいま',      k:'只今',         e:"I'm home!",                   cat:'greeting', p:null,     s:'ただいま、帰りました！' },
+  { h:'おかえり',      k:'お帰り',       e:'Welcome back (casual)',       cat:'greeting', p:null,     s:'おかえり、お疲れ様。' },
+  { h:'いただきます',  k:'頂きます',     e:"Let's eat / I humbly receive", cat:'greeting', p:null,   s:'では、いただきます。' },
+  { h:'ごちそうさま',  k:'ご馳走様',     e:'Thanks for the meal',         cat:'greeting', p:null,     s:'とても美味しかったです。ごちそうさまでした。' },
+
+  // ── Time ──
+  { h:'いま',   k:'今',    e:'Now',               cat:'time', p:[0,1],   s:'今、何時ですか。' },
+  { h:'きょう', k:'今日',  e:'Today',             cat:'time', p:[1,0,0], s:'今日は晴れていますね。' },
+  { h:'あした', k:'明日',  e:'Tomorrow',          cat:'time', p:[1,0,0], s:'明日、学校に行きます。' },
+  { h:'きのう', k:'昨日',  e:'Yesterday',         cat:'time', p:[1,0,0], s:'昨日、映画を見ました。' },
+  { h:'あさ',   k:'朝',    e:'Morning',           cat:'time', p:[0,1],   s:'朝は早く起きます。' },
+  { h:'ひる',   k:'昼',    e:'Noon / Daytime',    cat:'time', p:[0,1],   s:'昼ご飯は何を食べますか。' },
+  { h:'よる',   k:'夜',    e:'Night / Evening',   cat:'time', p:[0,1],   s:'夜、本を読みます。' },
+  { h:'まいにち', k:'毎日', e:'Every day',         cat:'time', p:null,   s:'毎日練習しています。' },
+  { h:'らいしゅう', k:'来週', e:'Next week',       cat:'time', p:null,   s:'来週、友達に会います。' },
+  { h:'せんしゅう', k:'先週', e:'Last week',       cat:'time', p:null,   s:'先週、旅行に行きました。' },
+  { h:'ことし', k:'今年',  e:'This year',         cat:'time', p:null,    s:'今年は日本語を頑張ります。' },
+  { h:'まえ',   k:'前',    e:'Before / Front',    cat:'time', p:[0,1],   s:'前に一度来たことがあります。' },
+  { h:'あと',   k:'後',    e:'After / Behind',    cat:'time', p:[0,1],   s:'後で電話します。' },
+  { h:'なんじ', k:'何時',  e:'What time?',        cat:'time', p:null,    s:'今、何時ですか。' },
+  { h:'はやい', k:'早い',  e:'Early / Fast',      cat:'time', p:[1,0,0], s:'朝は早い電車で行きます。' },
+
+  // ── Verbs ──
+  { h:'たべる',   k:'食べる',   e:'to eat',              cat:'verb', p:null,    s:'夕食は何を食べますか。' },
+  { h:'のむ',     k:'飲む',     e:'to drink',            cat:'verb', p:[0,1],   s:'朝は水を飲みます。' },
+  { h:'みる',     k:'見る',     e:'to see / watch',      cat:'verb', p:[0,1],   s:'テレビを見ます。' },
+  { h:'きく',     k:'聞く',     e:'to listen / ask',     cat:'verb', p:[0,1],   s:'音楽を聞きます。' },
+  { h:'はなす',   k:'話す',     e:'to speak / talk',     cat:'verb', p:null,    s:'友達と話します。' },
+  { h:'よむ',     k:'読む',     e:'to read',             cat:'verb', p:[0,1],   s:'毎日本を読みます。' },
+  { h:'かく',     k:'書く',     e:'to write',            cat:'verb', p:[0,1],   s:'日記を書きます。' },
+  { h:'いく',     k:'行く',     e:'to go',               cat:'verb', p:[0,1],   s:'学校に行きます。' },
+  { h:'くる',     k:'来る',     e:'to come',             cat:'verb', p:[1,0],   s:'友達が来ます。' },
+  { h:'かえる',   k:'帰る',     e:'to return home',      cat:'verb', p:null,    s:'六時に家に帰ります。' },
+  { h:'する',     k:'する',     e:'to do',               cat:'verb', p:[0,1],   s:'宿題をします。' },
+  { h:'ある',     k:'ある',     e:'to exist (things)',   cat:'verb', p:[0,1],   s:'机の上に本があります。' },
+  { h:'いる',     k:'いる',     e:'to exist (people/animals)', cat:'verb', p:[0,1], s:'部屋に猫がいます。' },
+  { h:'わかる',   k:'分かる',   e:'to understand',       cat:'verb', p:null,    s:'日本語が少しわかります。' },
+  { h:'おきる',   k:'起きる',   e:'to wake up',          cat:'verb', p:null,    s:'七時に起きます。' },
+  { h:'ねる',     k:'寝る',     e:'to sleep',            cat:'verb', p:[0,1],   s:'十一時に寝ます。' },
+  { h:'たつ',     k:'立つ',     e:'to stand',            cat:'verb', p:[0,1],   s:'椅子から立ちます。' },
+  { h:'すわる',   k:'座る',     e:'to sit',              cat:'verb', p:null,    s:'椅子に座ります。' },
+  { h:'かう',     k:'買う',     e:'to buy',              cat:'verb', p:[0,1],   s:'スーパーで野菜を買います。' },
+  { h:'つかう',   k:'使う',     e:'to use',              cat:'verb', p:null,    s:'スマホをよく使います。' },
+  { h:'でる',     k:'出る',     e:'to exit / leave',     cat:'verb', p:[0,1],   s:'八時に家を出ます。' },
+  { h:'はいる',   k:'入る',     e:'to enter',            cat:'verb', p:null,    s:'お風呂に入ります。' },
+
+  // ── Adjectives ──
+  { h:'おおきい', k:'大きい',   e:'big',                 cat:'adj', p:null,    s:'大きい犬が好きです。' },
+  { h:'ちいさい', k:'小さい',   e:'small',               cat:'adj', p:null,    s:'小さい猫がいます。' },
+  { h:'たかい',   k:'高い',     e:'tall / expensive',    cat:'adj', p:[1,0,0], s:'あのビルはとても高いです。' },
+  { h:'ひくい',   k:'低い',     e:'low / short',         cat:'adj', p:[1,0,0], s:'この木は低いですね。' },
+  { h:'ながい',   k:'長い',     e:'long',                cat:'adj', p:[1,0,0], s:'この川はとても長いです。' },
+  { h:'みじかい', k:'短い',     e:'short (length)',      cat:'adj', p:null,    s:'今日の授業は短かったです。' },
+  { h:'あたらしい',k:'新しい',  e:'new',                 cat:'adj', p:null,    s:'新しいスマホを買いました。' },
+  { h:'ふるい',   k:'古い',     e:'old (things)',        cat:'adj', p:[1,0,0], s:'この家はとても古いです。' },
+  { h:'いい',     k:'良い',     e:'good',                cat:'adj', p:[1,0],   s:'今日は天気がいいですね。' },
+  { h:'わるい',   k:'悪い',     e:'bad',                 cat:'adj', p:[1,0,0], s:'体の調子が悪いです。' },
+  { h:'あつい',   k:'暑い',     e:'hot (weather)',       cat:'adj', p:[1,0,0], s:'今日はとても暑いですね。' },
+  { h:'さむい',   k:'寒い',     e:'cold (weather)',      cat:'adj', p:[1,0,0], s:'冬はとても寒いです。' },
+  { h:'つめたい', k:'冷たい',   e:'cold (to touch)',     cat:'adj', p:null,    s:'冷たい水を飲みます。' },
+  { h:'おいしい', k:'美味しい', e:'delicious',           cat:'adj', p:null,    s:'このラーメンは美味しいですね。' },
+  { h:'まずい',   k:'まずい',   e:'bad tasting',         cat:'adj', p:[1,0,0], s:'この料理は少しまずいです。' },
+  { h:'たのしい', k:'楽しい',   e:'fun / enjoyable',     cat:'adj', p:null,    s:'旅行はとても楽しいです。' },
+  { h:'むずかしい',k:'難しい',  e:'difficult',           cat:'adj', p:null,    s:'日本語は難しいですが、楽しいです。' },
+  { h:'やさしい', k:'優しい',   e:'kind / gentle / easy', cat:'adj', p:null,  s:'先生はとても優しいです。' },
+  { h:'からい',   k:'辛い',     e:'spicy / hot',         cat:'adj', p:[1,0,0], s:'この料理はとても辛いです。' },
+  { h:'あまい',   k:'甘い',     e:'sweet',               cat:'adj', p:[1,0,0], s:'このケーキはとても甘いです。' },
+
+  // ── Nouns ──
+  { h:'ひと',     k:'人',       e:'person',              cat:'noun', p:[1,0],     s:'駅に人がたくさんいます。' },
+  { h:'みず',     k:'水',       e:'water',               cat:'noun', p:[0,1],     s:'水を飲みます。' },
+  { h:'まち',     k:'町',       e:'town / city',         cat:'noun', p:[0,1],     s:'この町は静かですね。' },
+  { h:'くに',     k:'国',       e:'country',             cat:'noun', p:[0,1],     s:'どの国から来ましたか。' },
+  { h:'うち',     k:'家',       e:'home / house (casual)',cat:'noun', p:[0,1],    s:'家に帰ります。' },
+  { h:'がっこう', k:'学校',     e:'school',              cat:'noun', p:null,      s:'毎日学校に歩いて行きます。' },
+  { h:'かいしゃ', k:'会社',     e:'company',             cat:'noun', p:null,      s:'父は会社で働いています。' },
+  { h:'でんしゃ', k:'電車',     e:'train',               cat:'noun', p:[1,0,0,0], s:'電車で会社に行きます。' },
+  { h:'くるま',   k:'車',       e:'car',                 cat:'noun', p:null,      s:'車で旅行します。' },
+  { h:'ともだち', k:'友達',     e:'friend',              cat:'noun', p:null,      s:'友達と映画を見ます。' },
+  { h:'せんせい', k:'先生',     e:'teacher',             cat:'noun', p:null,      s:'先生に質問します。' },
+  { h:'がくせい', k:'学生',     e:'student',             cat:'noun', p:null,      s:'学生として頑張ります。' },
+  { h:'かぞく',   k:'家族',     e:'family',              cat:'noun', p:null,      s:'家族と一緒に食事します。' },
+  { h:'おとうさん',k:'お父さん', e:'father',             cat:'noun', p:null,      s:'お父さんは会社に行きます。' },
+  { h:'おかあさん',k:'お母さん', e:'mother',             cat:'noun', p:null,      s:'お母さんがご飯を作ります。' },
+  { h:'そと',     k:'外',       e:'outside',             cat:'noun', p:[1,0],     s:'今日は外で遊びます。' },
+  { h:'なか',     k:'中',       e:'inside / middle',     cat:'noun', p:[0,1],     s:'箱の中に何がありますか。' },
+  { h:'うえ',     k:'上',       e:'above / top',         cat:'noun', p:[0,1],     s:'机の上に本があります。' },
+  { h:'した',     k:'下',       e:'below / under',       cat:'noun', p:[0,1],     s:'椅子の下に猫がいます。' },
+  { h:'みぎ',     k:'右',       e:'right',               cat:'noun', p:[0,1],     s:'次の角を右に曲がります。' },
+  { h:'ひだり',   k:'左',       e:'left',                cat:'noun', p:[1,0,0],   s:'左に曲がると駅があります。' },
+  { h:'ほん',     k:'本',       e:'book',                cat:'noun', p:[1,0],     s:'本を読みます。' },
+  { h:'かばん',   k:'鞄',       e:'bag',                 cat:'noun', p:null,      s:'鞄を持って出かけます。' },
+  { h:'でんわ',   k:'電話',     e:'telephone',           cat:'noun', p:null,      s:'電話をかけます。' },
+  { h:'ごはん',   k:'ご飯',     e:'rice / meal',         cat:'noun', p:null,      s:'ご飯を食べます。' },
+  { h:'にく',     k:'肉',       e:'meat',                cat:'noun', p:[1,0],     s:'肉が好きです。' },
+  { h:'さかな',   k:'魚',       e:'fish',                cat:'noun', p:[0,1,1],   s:'魚を食べます。' },
+  { h:'やさい',   k:'野菜',     e:'vegetable',           cat:'noun', p:null,      s:'野菜をたくさん食べます。' },
+  { h:'てんき',   k:'天気',     e:'weather',             cat:'noun', p:[1,0,0],   s:'今日は天気がいいですね。' },
+  { h:'いぬ',     k:'犬',       e:'dog',                 cat:'noun', p:[1,0],     s:'犬を散歩させます。' },
+  { h:'ねこ',     k:'猫',       e:'cat',                 cat:'noun', p:[0,1],     s:'部屋に猫がいます。' },
+  { h:'そら',     k:'空',       e:'sky',                 cat:'noun', p:[1,0],     s:'空が青いです。' },
+  { h:'はな',     k:'花',       e:'flower',              cat:'noun', p:[1,0],     s:'花がきれいです。' },
+  { h:'かわ',     k:'川',       e:'river',               cat:'noun', p:[0,1],     s:'川で魚を釣ります。' },
+  { h:'やま',     k:'山',       e:'mountain',            cat:'noun', p:[0,1],     s:'山に登ります。' },
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// VOICE — auto-selects Gemini TTS (deployed) or Web Speech (local)
+// ═══════════════════════════════════════════════════════════════════════
+
+const USE_GEMINI = location.hostname !== 'localhost' && location.hostname !== '';
+
+// ── Web Speech (local fallback) ──
+let jaVoice = null;
+
+function loadVoices() {
+  if (USE_GEMINI) return;
+  const all = speechSynthesis.getVoices();
+  const jaVoices = all.filter(v => v.lang && v.lang.startsWith('ja'));
+  const sel = document.getElementById('voice-select');
+  if (!jaVoices.length) return;
+  sel.innerHTML = '';
+  jaVoices.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.name; o.textContent = v.name;
+    sel.appendChild(o);
+  });
+  const preferred = jaVoices.find(v => v.name.includes('Google') && v.lang === 'ja-JP')
+    || jaVoices.find(v => v.name.includes('Nanami'))
+    || jaVoices.find(v => v.name.includes('Haruka'))
+    || jaVoices[0];
+  jaVoice = preferred;
+  sel.value = preferred.name;
+  sel.addEventListener('change', () => { jaVoice = jaVoices.find(v => v.name === sel.value) || preferred; });
+}
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+if (USE_GEMINI) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const vr = document.getElementById('voice-row');
+    if (vr) vr.innerHTML = '<span style="font-size:0.82rem;opacity:0.9;">✨ Gemini TTS</span>';
+  });
+}
+
+// ── Gemini TTS ──
+let _audioCtx = null;
+
+function _getAudioCtx() {
+  if (!_audioCtx || _audioCtx.state === 'closed') _audioCtx = new AudioContext();
+  return _audioCtx;
+}
+
+async function speakGemini(text) {
+  let data;
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    data = await res.json();
+  } catch(e) {
+    console.warn('Gemini TTS failed, falling back:', e);
+    speakWebSpeech(text, 0.9); return;
+  }
+  if (!data.audio) { console.warn('No audio from Gemini TTS', data); speakWebSpeech(text, 0.9); return; }
+  const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+  const ctx = _getAudioCtx();
+  const buf = ctx.createBuffer(1, bytes.length / 2, 24000);
+  const ch = buf.getChannelData(0);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < ch.length; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start();
+}
+
+function speakWebSpeech(text, rate) {
+  speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'ja-JP';
+  if (jaVoice) utt.voice = jaVoice;
+  utt.rate = rate || 0.9;
+  speechSynthesis.speak(utt);
+}
+
+function speak(text, rate) {
+  if (USE_GEMINI) { speakGemini(text); return; }
+  speakWebSpeech(text, rate);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+let pool = [];           // current filtered pool
+let weights = {};        // word index → weight (higher = shown more)
+let seenWords = new Set();
+let currentWord = null;
+let answered = false;
+let correct = 0;
+let total = 0;
+let streak = 0;
+let wrongWords = [];     // {word, yourAnswer} for review
+let activeCat = 'all';
+const SESSION_LENGTH = 20;
+
+function initPool(cat) {
+  activeCat = cat;
+  pool = cat === 'all' ? [...VOCAB] : VOCAB.filter(w => w.cat === cat);
+  weights = {};
+  pool.forEach((_, i) => { weights[i] = 1; });
+  seenWords.clear();
+  correct = 0; total = 0; streak = 0; wrongWords = [];
+  updateScore();
+  document.getElementById('end-screen').style.display = 'none';
+  document.getElementById('quiz-card').style.display = 'block';
+  nextQuestion();
+}
+
+function pickWord() {
+  // Weighted random
+  const totalWeight = pool.reduce((s, _, i) => s + (weights[i] || 1), 0);
+  let r = Math.random() * totalWeight;
+  for (let i = 0; i < pool.length; i++) {
+    r -= (weights[i] || 1);
+    if (r <= 0) return i;
+  }
+  return pool.length - 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// QUIZ LOGIC
+// ═══════════════════════════════════════════════════════════════════════
+function nextQuestion() {
+  if (total >= SESSION_LENGTH) { showEndScreen(); return; }
+
+  answered = false;
+  document.getElementById('feedback-text').textContent = '';
+  document.getElementById('reveal').style.display = 'none';
+  document.getElementById('next-btn').style.display = 'none';
+
+  const idx = pickWord();
+  currentWord = { word: pool[idx], idx };
+  seenWords.add(pool[idx].h);
+
+  // 4 options: correct + 3 distractors (same category preferred)
+  const distractors = [];
+  const sameCat = pool.filter((w, i) => i !== idx && w.h !== pool[idx].h);
+  const shuffled = sameCat.sort(() => Math.random() - 0.5);
+  while (distractors.length < 3 && shuffled.length > distractors.length) {
+    distractors.push(shuffled[distractors.length]);
+  }
+  const opts = [pool[idx], ...distractors].sort(() => Math.random() - 0.5);
+
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  opts.forEach(w => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.innerHTML = `${w.h}<span class="opt-meaning"></span>`;
+    btn.addEventListener('click', () => answerQuestion(btn, w.h === pool[idx].h, w));
+    grid.appendChild(btn);
+  });
+
+  // Auto-play
+  setTimeout(() => speak(pool[idx].h, 0.9), 300);
+}
+
+function answerQuestion(btn, isCorrect, chosen) {
+  if (answered) return;
+  answered = true;
+  total++;
+
+  const word = currentWord.word;
+
+  if (isCorrect) {
+    correct++;
+    streak++;
+    weights[currentWord.idx] = Math.max(0.5, (weights[currentWord.idx] || 1) * 0.6);
+    btn.classList.add('correct');
+    document.getElementById('feedback-text').textContent = '✓ Correct!';
+    document.getElementById('feedback-text').style.color = '#2e7d32';
+  } else {
+    streak = 0;
+    weights[currentWord.idx] = (weights[currentWord.idx] || 1) + 2.5;
+    btn.classList.add('wrong');
+    wrongWords.push({ word, yourAnswer: chosen });
+    // Highlight correct
+    document.querySelectorAll('.opt').forEach(b => {
+      if (b.textContent.startsWith(word.h)) b.classList.add('correct');
+    });
+    document.getElementById('feedback-text').textContent = `✗  The word was: ${word.h}`;
+    document.getElementById('feedback-text').style.color = '#c62828';
+  }
+
+  document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  // Show meaning on all options
+  document.querySelectorAll('.opt').forEach(b => {
+    const h = b.childNodes[0].textContent.trim();
+    const match = pool.find(w => w.h === h);
+    if (match) b.querySelector('.opt-meaning').textContent = match.e;
+  });
+
+  showReveal(word);
+  updateScore();
+  document.getElementById('next-btn').style.display = 'block';
+}
+
+function showReveal(word) {
+  const rv = document.getElementById('reveal');
+  let pitchHTML = '';
+  if (word.p && word.p.length === [...word.h].length) {
+    const morae = [...word.h];
+    const boxes = morae.map((m, i) => {
+      const cls = word.p[i] ? 'hi' : 'lo';
+      return `<div class="rv-pm ${cls}"><div class="rv-pm-box">${m}</div></div>`;
+    }).join('');
+    pitchHTML = `
+      <div class="rv-pitch">
+        <div class="pitch-label">Pitch: <span style="color:#7b1fa2">■ high</span> / <span style="color:#999">■ low</span></div>
+        <div class="rv-pd">${boxes}</div>
+      </div>`;
+  }
+
+  const sentenceHTML = word.s
+    ? `<div class="rv-row" style="margin-top:8px;">
+         <button onclick="speak('${word.s.replace(/'/g, "\\'")}', 0.8)" style="background:#f3e5f5; border:1px solid #ce93d8; border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; color:#4a148c;">▶ ${word.s}</button>
+       </div>`
+    : '';
+
+  rv.innerHTML = `
+    <div class="rv-word">${word.h} 【${word.k}】</div>
+    <div class="rv-row">📖 ${word.e}</div>
+    <div class="rv-row" style="font-size:0.78rem; color:#999; margin-top:2px;">Category: ${word.cat}</div>
+    ${pitchHTML}
+    ${sentenceHTML}
+  `;
+  rv.style.display = 'block';
+}
+
+function updateScore() {
+  document.getElementById('sc-correct').textContent = correct;
+  document.getElementById('sc-total').textContent = total;
+  document.getElementById('sc-seen').textContent = seenWords.size;
+  document.getElementById('sc-pool').textContent = pool.length;
+  document.getElementById('sc-pct').textContent = total ? `(${Math.round(correct/total*100)}%)` : '';
+  document.getElementById('sc-streak').textContent = streak >= 3 ? `🔥 ${streak} streak!` : '';
+  document.getElementById('progress-fill').style.width = `${(total / SESSION_LENGTH) * 100}%`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// END SCREEN
+// ═══════════════════════════════════════════════════════════════════════
+function showEndScreen() {
+  document.getElementById('quiz-card').style.display = 'none';
+  const end = document.getElementById('end-screen');
+  end.style.display = 'block';
+  const pct = Math.round(correct / total * 100);
+  const medal = pct >= 90 ? '🥇' : pct >= 70 ? '🥈' : pct >= 50 ? '🥉' : '💪';
+  document.getElementById('end-title').textContent = `${medal} Session Complete!`;
+  document.getElementById('end-summary').innerHTML =
+    `Score: <strong>${correct} / ${total}</strong> (${pct}%)<br>
+     Unique words seen: <strong>${seenWords.size}</strong><br>
+     ${wrongWords.length === 0 ? '🎉 Perfect session!' : `Words to review: <strong>${wrongWords.length}</strong>`}`;
+
+  const rl = document.getElementById('review-list');
+  if (wrongWords.length) {
+    rl.innerHTML = '<h3>Review these words:</h3>';
+    wrongWords.forEach(({ word }) => {
+      const item = document.createElement('div');
+      item.className = 'review-item';
+      item.innerHTML = `<span class="rw">${word.h}</span><span>【${word.k}】 — ${word.e}</span>`;
+      rl.appendChild(item);
+    });
+  } else {
+    rl.innerHTML = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (currentWord) speak(currentWord.word.h, 0.9);
+});
+document.getElementById('play-slow').addEventListener('click', () => {
+  if (currentWord) speak(currentWord.word.h, 0.55);
+});
+document.getElementById('play-sentence-btn').addEventListener('click', () => {
+  if (currentWord && currentWord.word.s) speak(currentWord.word.s, 0.8);
+});
+document.getElementById('next-btn').addEventListener('click', nextQuestion);
+document.getElementById('reset-btn').addEventListener('click', () => initPool(activeCat));
+document.getElementById('restart-btn').addEventListener('click', () => initPool(activeCat));
+
+document.getElementById('filter-bar').addEventListener('click', e => {
+  if (!e.target.classList.contains('cat-btn')) return;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  initPool(e.target.dataset.cat);
+});
+
+// Start
+initPool('all');
+
+// ═══════════════════════════════════════════════════════════════════════
+// SPEECH RECOGNITION — "Say it aloud" button
+// ═══════════════════════════════════════════════════════════════════════
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let quizRec = null;
+const speakBtn = document.getElementById('speak-try-btn');
+const speakResult = document.getElementById('speak-result');
+
+if (SpeechRecognition) {
+  quizRec = new SpeechRecognition();
+  quizRec.lang = 'ja-JP';
+  quizRec.interimResults = false;
+  quizRec.maxAlternatives = 5;
+} else {
+  speakBtn.disabled = true;
+  speakBtn.title = 'Speech recognition requires Chrome';
+  speakBtn.textContent = '🎤 Chrome only';
+}
+
+function katakanaToHiragana(str) {
+  return str.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
+function cleanJP(str) {
+  // Strip punctuation, spaces, common sentence-end markers
+  return katakanaToHiragana(str.trim().replace(/[。、！？!?\s]/g, ''));
+}
+
+function srCompare(expectedHiragana, heard, expectedKanji) {
+  const e = cleanJP(expectedHiragana);
+  const h = cleanJP(heard);
+
+  // Match against hiragana form
+  if (h === e || h.includes(e) || e.includes(h)) return 'exact';
+
+  // Match against kanji form — recognizer often returns kanji (e.g. 話す for はなす)
+  if (expectedKanji) {
+    const k = expectedKanji.trim().replace(/[。、！？!?\s]/g, '');
+    const hRaw = heard.trim().replace(/[。、！？!?\s]/g, '');
+    if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
+  }
+
+  // Character overlap on hiragana
+  let overlap = 0;
+  for (let i = 0; i < Math.min(e.length, h.length); i++) {
+    if (e[i] === h[i]) overlap++;
+  }
+  const ratio = overlap / e.length;
+  if (ratio >= 0.7) return 'close';
+  if (ratio >= 0.4) return 'partial';
+  return 'miss';
+}
+
+speakBtn.addEventListener('click', () => {
+  if (!quizRec || !currentWord) return;
+  speakBtn.textContent = '🔴 Listening…';
+  speakBtn.classList.add('listening');
+  speakBtn.disabled = true;
+  speakResult.innerHTML = '<span style="color:#888;">Listening… say the word now</span>';
+
+  quizRec.onresult = (ev) => {
+    const alternatives = Array.from(ev.results[0]).map(r => r.transcript);
+
+    // Pick the alternative that best matches (check hiragana AND kanji forms)
+    let bestLevel = 'miss';
+    let bestAlt = alternatives[0];
+    for (const alt of alternatives) {
+      const lv = srCompare(currentWord.word.h, alt, currentWord.word.k);
+      if (['exact','close','partial','miss'].indexOf(lv) <
+          ['exact','close','partial','miss'].indexOf(bestLevel)) {
+        bestLevel = lv; bestAlt = alt;
+      }
+    }
+
+    const cfg = {
+      exact:   { cls: 'sr-exact',   icon: '✓', label: 'Great match!' },
+      close:   { cls: 'sr-close',   icon: '~', label: 'Close — keep going!' },
+      partial: { cls: 'sr-partial', icon: '△', label: 'Partial — try again' },
+      miss:    { cls: 'sr-miss',    icon: '✗', label: 'Not recognised — try again' },
+    }[bestLevel];
+
+    speakResult.innerHTML =
+      `<span class="${cfg.cls}">${cfg.icon} ${cfg.label}</span>
+       <span style="color:#888; margin-left:8px;">You said: <strong>${bestAlt}</strong></span>`;
+  };
+
+  quizRec.onerror = (ev) => {
+    const msgs = {
+      'no-speech':   'No speech detected.',
+      'not-allowed': 'Mic access denied — check browser settings.',
+      'network':     'Network error (speech recognition needs internet).',
+    };
+    speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${msgs[ev.error] || ev.error}</span>`;
+  };
+
+  quizRec.onend = () => {
+    speakBtn.textContent = '🎤 Say it aloud';
+    speakBtn.classList.remove('listening');
+    speakBtn.disabled = false;
+  };
+
+  try { quizRec.start(); } catch (e) { /* already running */ }
+});
+</script>
+</body>
+</html>

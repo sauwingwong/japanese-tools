@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Japanese Phoneme Trainer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f4; color: #222; }
+
+header {
+  background: #c62828; color: white; padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+header h1 { font-size: 1.3rem; font-weight: 600; }
+#voice-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+#voice-select { padding: 4px 8px; border-radius: 4px; border: none; font-size: 0.82rem; max-width: 210px; }
+#voice-status { font-size: 0.75rem; opacity: 0.8; }
+
+nav { background: white; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; padding: 0 12px; }
+.tab {
+  padding: 11px 14px; border: none; background: none; cursor: pointer;
+  font-size: 0.85rem; color: #555; white-space: nowrap;
+  border-bottom: 3px solid transparent; transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover { color: #c62828; }
+.tab.active { color: #c62828; border-bottom-color: #c62828; font-weight: 600; }
+
+main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── SOUND CHART ── */
+.chart-group { margin-bottom: 24px; }
+.chart-group-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.chart-group-hdr h3 { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin: 0; }
+.play-all-btn {
+  background: #c62828; color: white; border: none; border-radius: 12px;
+  padding: 3px 11px; font-size: 0.72rem; cursor: pointer; white-space: nowrap;
+  transition: background 0.12s;
+}
+.play-all-btn:hover { background: #b71c1c; }
+.play-all-btn.playing { background: #555; }
+.kana-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+.kana-cell {
+  background: white; border: 1px solid #ddd; border-radius: 6px;
+  width: 60px; min-height: 56px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s; user-select: none;
+}
+.kana-cell:hover { background: #ffebee; border-color: #c62828; }
+.kana-cell.flash { background: #c62828; border-color: #c62828; }
+.kana-cell.flash .kana-ro { color: #ffcdd2; }
+.kana-char { font-size: 1.4rem; line-height: 1.1; }
+.kana-ro { font-size: 0.62rem; color: #999; }
+
+/* ── SHARED DRILL STYLES ── */
+.tip {
+  background: #fffde7; border-left: 3px solid #f9a825;
+  padding: 10px 14px; border-radius: 0 6px 6px 0;
+  font-size: 0.88rem; line-height: 1.55; margin-bottom: 18px;
+}
+.section-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 6px; }
+.sub-title { font-size: 0.95rem; font-weight: 600; color: #444; margin: 18px 0 8px; }
+
+/* ── MINIMAL PAIRS ── */
+.pairs-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 24px; }
+.pair-row { display: flex; align-items: stretch; gap: 10px; }
+.pair-btn {
+  flex: 1; background: white; border: 1.5px solid #ddd; border-radius: 8px;
+  padding: 14px 10px; text-align: center; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s; line-height: 1.3;
+}
+.pair-btn:hover { border-color: #c62828; background: #ffebee; }
+.pair-btn.flash { background: #c62828; color: white; border-color: #c62828; }
+.pair-btn.flash .pw-meaning { color: #ffcdd2; }
+.pw-word { font-size: 1.5rem; }
+.pw-meaning { font-size: 0.75rem; color: #777; margin-top: 2px; }
+.pair-vs { display: flex; align-items: center; color: #bbb; font-size: 0.8rem; font-weight: 600; padding: 0 2px; }
+
+/* Mora beat display */
+.mora-beats { display: flex; gap: 5px; justify-content: center; align-items: center; margin-top: 8px; }
+.beat { width: 34px; height: 34px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 1rem; font-weight: 500; }
+.beat-regular { background: #e8f5e9; border: 1px solid #a5d6a7; color: #2e7d32; }
+.beat-sokuon { background: #fce4ec; border: 1px solid #f48fb1; color: #880e4f; font-size: 0.75rem; }
+
+/* ── RA-ROW DRILL ── */
+.ra-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.ra-card {
+  background: white; border: 1.5px solid #ddd; border-radius: 8px;
+  padding: 16px 12px; text-align: center; cursor: pointer; min-width: 80px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.ra-card:hover { border-color: #1565c0; background: #e3f2fd; }
+.ra-card.flash { background: #1565c0; color: white; border-color: #1565c0; }
+.ra-card.flash .ra-ro { color: #bbdefb; }
+.ra-kana { font-size: 2rem; line-height: 1.1; }
+.ra-ro { font-size: 0.8rem; color: #777; margin-top: 2px; }
+
+.words-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.word-chip {
+  background: white; border: 1px solid #ddd; border-radius: 20px;
+  padding: 5px 14px; font-size: 0.95rem; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.word-chip:hover { background: #e3f2fd; border-color: #1565c0; }
+.word-chip.flash { background: #1565c0; color: white; border-color: #1565c0; }
+
+/* ── PITCH ACCENT ── */
+.pitch-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.pitch-card {
+  background: white; border: 1.5px solid #ddd; border-radius: 8px;
+  padding: 12px 10px; cursor: pointer; width: 130px; text-align: center;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.pitch-card:hover { border-color: #6a1b9a; box-shadow: 0 2px 8px rgba(106,27,154,0.12); }
+.pitch-card.flash { border-color: #6a1b9a; background: #f3e5f5; }
+.pd { display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 48px; margin-bottom: 8px; }
+.pm { display: flex; flex-direction: column; align-items: center; }
+.pm.hi { justify-content: flex-end; }
+.pm.lo { justify-content: flex-end; padding-top: 22px; }
+.pm-box {
+  width: 30px; height: 26px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; font-size: 0.9rem;
+}
+.pm.hi .pm-box { background: #7b1fa2; color: white; }
+.pm.lo .pm-box { background: #e0e0e0; color: #555; }
+.pc-word { font-size: 1.1rem; font-weight: 500; }
+.pc-read { font-size: 0.72rem; color: #888; }
+.pc-mean { font-size: 0.72rem; color: #555; }
+.pc-note { font-size: 0.68rem; color: #7b1fa2; margin-top: 2px; }
+
+/* ── PRACTICE MODE ── */
+#practice-area {
+  background: white; border-radius: 10px; padding: 28px 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); text-align: center; margin-bottom: 16px;
+}
+#prac-score { font-size: 0.88rem; color: #666; margin-bottom: 12px; }
+#prac-play {
+  width: 76px; height: 76px; border-radius: 50%; background: #c62828; color: white;
+  border: none; font-size: 2rem; cursor: pointer; margin: 0 auto 20px;
+  display: flex; align-items: center; justify-content: center; transition: background 0.12s, transform 0.12s;
+}
+#prac-play:hover { background: #b71c1c; transform: scale(1.05); }
+#prac-play:disabled { background: #ccc; cursor: default; transform: none; }
+#prac-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 340px; margin: 0 auto; }
+.opt-btn {
+  background: white; border: 2px solid #ddd; border-radius: 8px;
+  padding: 14px 8px; font-size: 1.35rem; cursor: pointer; transition: all 0.12s;
+}
+.opt-btn:hover:not(:disabled) { border-color: #c62828; background: #ffebee; }
+.opt-btn.correct { border-color: #2e7d32 !important; background: #e8f5e9 !important; }
+.opt-btn.wrong   { border-color: #c62828 !important; background: #ffebee !important; }
+#prac-feedback { min-height: 26px; margin-top: 12px; font-size: 0.95rem; font-weight: 500; }
+#prac-next { margin-top: 14px; display: none; }
+.btn { padding: 9px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.88rem; font-weight: 500; }
+.btn-red { background: #c62828; color: white; }
+.btn-red:hover { background: #b71c1c; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎌 Japanese Phoneme Trainer</h1>
+  <div id="voice-row">
+    <label for="voice-select">Voice:</label>
+    <select id="voice-select"></select>
+    <span id="voice-status">loading…</span>
+  </div>
+</header>
+
+<nav>
+  <button class="tab active" data-panel="chart">Sound Chart</button>
+  <button class="tab" data-panel="long-vowels">Long Vowels</button>
+  <button class="tab" data-panel="sokuon">Double っ</button>
+  <button class="tab" data-panel="ra-row">ら行 R-Sounds</button>
+  <button class="tab" data-panel="pitch">Pitch Accent</button>
+  <button class="tab" data-panel="practice">Practice</button>
+  <button class="tab" data-panel="shadowing">Shadowing 🎤</button>
+</nav>
+
+<main>
+
+<!-- ══════════════════════════════════ SOUND CHART ══════════════════════════════════ -->
+<div id="chart" class="panel active">
+  <p class="tip">Click any sound to hear it. Use the voice picker (top-right) to select the best Japanese voice on your system — Google 日本語 in Chrome is recommended.</p>
+  <div id="chart-container"></div>
+</div>
+
+<!-- ══════════════════════════════════ LONG VOWELS ══════════════════════════════════ -->
+<div id="long-vowels" class="panel">
+  <div class="section-title">Long Vowels (長音 chōon)</div>
+  <div class="tip">
+    Japanese vowels can be <strong>short (1 mora)</strong> or <strong>long (2 mora)</strong>. Holding the vowel for exactly one extra beat changes the meaning entirely.
+    Click each word to hear the difference. The words below are <em>minimal pairs</em> — identical except for vowel length.
+  </div>
+
+  <div class="sub-title">Minimal Pairs — click to hear</div>
+  <div class="pairs-list" id="lv-pairs"></div>
+
+  <div class="sub-title">Quick Quiz</div>
+  <div id="lv-quiz-area" style="background:white; border-radius:8px; padding:20px; border:1px solid #eee;">
+    <p style="font-size:0.88rem; color:#666; margin-bottom:12px;">Listen to the word and choose which you heard.</p>
+    <button class="btn btn-red" id="lv-quiz-start">Start Quiz</button>
+    <div id="lv-quiz-q" style="display:none; margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════ DOUBLE CONSONANTS ══════════════════════════════════ -->
+<div id="sokuon" class="panel">
+  <div class="section-title">Double Consonants (促音 sokuon — っ)</div>
+  <div class="tip">
+    The small っ represents a <strong>silent pause of exactly one mora</strong>. Hold your breath briefly before the next consonant.
+    <br>Example: <strong>き・て</strong> = 2 beats &nbsp;|&nbsp; <strong>き・っ・て</strong> = 3 beats (the っ is a held pause, not a sound).
+    <br>The boxes below show the mora beats — the red box ■ is the pause.
+  </div>
+
+  <div class="sub-title">Minimal Pairs — click to hear</div>
+  <div class="pairs-list" id="sk-pairs"></div>
+</div>
+
+<!-- ══════════════════════════════════ RA ROW ══════════════════════════════════ -->
+<div id="ra-row" class="panel">
+  <div class="section-title">ら行 R-Sounds (ら り る れ ろ)</div>
+  <div class="tip">
+    Japanese ら行 is a <strong>single quick flap</strong> — the tip of your tongue lightly taps just behind the upper teeth and immediately drops.
+    <br>❌ NOT English "r" — don't curl your tongue back.
+    <br>❌ NOT English "l" — don't press your tongue against your teeth firmly.
+    <br>✅ Like the quick "r/d" in American English <em>bu<strong>tt</strong>er</em> or <em>la<strong>dd</strong>er</em>.
+  </div>
+
+  <div class="sub-title">Click each sound to hear it</div>
+  <div class="ra-cards" id="ra-cards"></div>
+
+  <div class="sub-title">Practice words — click to hear</div>
+  <div id="ra-words"></div>
+</div>
+
+<!-- ══════════════════════════════════ PITCH ACCENT ══════════════════════════════════ -->
+<div id="pitch" class="panel">
+  <div class="section-title">Pitch Accent (ピッチアクセント)</div>
+  <div class="tip">
+    Standard Tokyo Japanese uses <strong>pitch accent</strong>: each mora is either <span style="color:#7b1fa2; font-weight:600">HIGH ■</span> or <span style="color:#777; font-weight:600">low ■</span>.
+    Wrong pitch makes you sound unnatural and can change meaning (e.g. 雨 rain vs 飴 candy — same sounds, different pitch).
+    <br>The blocks below show the H/L pattern. Click any card to hear it.
+    <br>⚠ <strong>TTS limitation:</strong> voices often can't distinguish pitch on a single word in isolation. Use the <strong>purple sentence buttons</strong> below each pair — hearing the word in a full sentence produces much more natural pitch.
+    <br><em>For human recordings: <strong>OJAD</strong> (ojad.eng.hokudai.ac.jp) or <strong>Forvo</strong> (forvo.com).</em>
+  </div>
+
+  <div class="sub-title">Famous Minimal Pairs</div>
+  <div id="pitch-pairs-area"></div>
+
+  <div class="sub-title">Common N5 Words with Pitch</div>
+  <div class="pitch-grid" id="pitch-grid"></div>
+</div>
+
+<!-- ══════════════════════════════════ PRACTICE ══════════════════════════════════ -->
+<div id="practice" class="panel">
+  <div class="section-title">Practice Mode</div>
+  <div class="tip">A kana sound is played — click the correct character. Score is tracked for this session.</div>
+
+  <div id="practice-area">
+    <div id="prac-score">Score: <span id="prac-correct">0</span> / <span id="prac-total">0</span></div>
+    <button id="prac-play" title="Play sound">▶</button>
+    <div id="prac-options"></div>
+    <div id="prac-feedback"></div>
+    <div id="prac-next">
+      <button class="btn btn-red" id="prac-next-btn">Next →</button>
+    </div>
+  </div>
+  <button class="btn btn-red" id="prac-reset-btn" style="margin-top:8px;">Reset Score</button>
+</div>
+
+<!-- ══════════════════════════════════ SHADOWING ══════════════════════════════════ -->
+<div id="shadowing" class="panel">
+  <div class="section-title">Shadowing — Speak &amp; Check</div>
+  <div id="shad-no-support" style="display:none; background:#fce4ec; border-left:3px solid #c62828; padding:10px 14px; border-radius:0 6px 6px 0; margin-bottom:16px; font-size:0.88rem;">
+    ⚠ Speech recognition is not available in this browser. Please use <strong>Chrome</strong> on desktop.
+  </div>
+  <div class="tip">
+    <strong>How to use:</strong> Click <em>▶ Hear it</em> to listen, then click <em>🎤 Speak</em> and say the word aloud.
+    The recognizer will transcribe what it heard and compare it to the target word.
+    <br>Requires <strong>Chrome</strong> + microphone permission. Works best with words of 2+ mora.
+  </div>
+
+  <div id="shad-card" style="background:white; border-radius:10px; padding:28px 20px; box-shadow:0 2px 8px rgba(0,0,0,0.07); text-align:center; margin-bottom:14px;">
+    <div style="font-size:0.75rem; color:#aaa; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;" id="shad-category"></div>
+    <div id="shad-word" style="font-size:3rem; font-weight:500; margin-bottom:6px; min-height:3.5rem; line-height:1.2;"></div>
+    <div id="shad-reading" style="font-size:1rem; color:#888; margin-bottom:2px;"></div>
+    <div id="shad-meaning" style="font-size:0.85rem; color:#aaa; margin-bottom:10px;"></div>
+    <div id="shad-pitch-wrap" style="min-height:52px; display:flex; flex-direction:column; align-items:center; margin-bottom:14px;">
+      <div id="shad-pitch" style="display:flex; align-items:flex-end; gap:5px; height:44px;"></div>
+      <div id="shad-pitch-label" style="font-size:0.7rem; color:#9c27b0; margin-top:3px;"></div>
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:20px;">
+      <button class="btn btn-red" id="shad-hear">▶ Hear it</button>
+      <button class="btn btn-red" id="shad-hear-slow" style="background:#b71c1c;">▶ Slow</button>
+      <button class="btn" id="shad-sentence" style="background:#7b1fa2; color:white; padding:9px 14px; font-size:0.85rem;" title="Hear the word in a full sentence — pitch is more natural in context">▶ In sentence</button>
+      <button class="btn" id="shad-speak" style="background:#2e7d32; color:white; padding:9px 22px; font-size:0.9rem;">🎤 Speak</button>
+    </div>
+
+    <div id="shad-result" style="min-height:72px; margin-bottom:16px;"></div>
+
+    <button class="btn btn-red" id="shad-next">Next word →</button>
+  </div>
+
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+    <div style="font-size:0.88rem; color:#555;">Session: <strong id="shad-session-score">0 / 0</strong> <span id="shad-pct"></span></div>
+    <button class="btn" style="background:#eee; color:#444; font-size:0.8rem;" id="shad-reset">Reset session</button>
+  </div>
+
+  <div style="background:white; border-radius:8px; padding:14px 16px; border:1px solid #eee;">
+    <div style="font-size:0.8rem; color:#888; margin-bottom:8px;">Category filter:</div>
+    <div style="display:flex; flex-wrap:wrap; gap:6px;" id="shad-filter">
+      <button class="shad-cat active" data-cat="all">All</button>
+      <button class="shad-cat" data-cat="longvowel">Long Vowels</button>
+      <button class="shad-cat" data-cat="sokuon">Double っ</button>
+      <button class="shad-cat" data-cat="ra">ら行</button>
+      <button class="shad-cat" data-cat="common">Common vocab</button>
+      <button class="shad-cat" data-cat="loanwords">Loanwords カタカナ</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<style>
+.shad-cat {
+  padding: 4px 12px; border-radius: 16px; border: 1.5px solid #ddd;
+  background: white; font-size: 0.8rem; cursor: pointer; color: #555; transition: all 0.12s;
+}
+.shad-cat.active { background: #c62828; color: white; border-color: #c62828; }
+.shad-cat:hover:not(.active) { background: #ffebee; border-color: #c62828; }
+.shad-result-box {
+  border-radius: 8px; padding: 12px 16px; text-align: left; font-size: 0.9rem; line-height: 1.6;
+}
+.shad-exact { background: #e8f5e9; border: 1px solid #a5d6a7; }
+.shad-close  { background: #fff8e1; border: 1px solid #ffe082; }
+.shad-partial{ background: #fff3e0; border: 1px solid #ffcc80; }
+.shad-miss   { background: #ffebee; border: 1px solid #ef9a9a; }
+</style>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// SPEECH SYNTHESIS — auto-selects Gemini TTS (deployed) or Web Speech (local)
+// ═══════════════════════════════════════════════════════════════════════
+
+// When running on a real domain (Cloudflare), USE_GEMINI = true.
+// When running locally via start.bat (localhost) or file://, falls back to Web Speech API.
+const USE_GEMINI = location.hostname !== 'localhost' && location.hostname !== '';
+
+// ── Web Speech API (local fallback) ──
+let jaVoice = null;
+
+function loadVoices() {
+  if (USE_GEMINI) return; // not needed when using Gemini TTS
+  const all = speechSynthesis.getVoices();
+  const jaVoices = all.filter(v => v.lang && v.lang.startsWith('ja'));
+  const sel = document.getElementById('voice-select');
+  const status = document.getElementById('voice-status');
+
+  if (jaVoices.length === 0) {
+    status.textContent = '⚠ no ja-JP voice found';
+    return;
+  }
+
+  sel.innerHTML = '';
+  jaVoices.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.name;
+    o.textContent = v.name;
+    sel.appendChild(o);
+  });
+
+  const preferred = jaVoices.find(v => v.name.includes('Google') && v.lang === 'ja-JP')
+    || jaVoices.find(v => v.name.includes('Nanami'))
+    || jaVoices.find(v => v.name.includes('Haruka'))
+    || jaVoices[0];
+
+  jaVoice = preferred;
+  sel.value = preferred.name;
+  status.textContent = '✓ ready';
+
+  sel.addEventListener('change', () => {
+    jaVoice = jaVoices.find(v => v.name === sel.value) || preferred;
+  });
+}
+
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+// When deployed, replace the voice picker with a Gemini TTS badge
+if (USE_GEMINI) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const vr = document.getElementById('voice-row');
+    if (vr) vr.innerHTML = '<span style="font-size:0.82rem;opacity:0.9;">✨ Gemini TTS</span>';
+  });
+}
+
+// ── Gemini TTS ──
+let _audioCtx = null;
+let _currentSource = null;
+
+function _getAudioCtx() {
+  if (!_audioCtx || _audioCtx.state === 'closed') _audioCtx = new AudioContext();
+  return _audioCtx;
+}
+
+function _stopGeminiAudio() {
+  if (_currentSource) { try { _currentSource.stop(); } catch(e) {} _currentSource = null; }
+}
+
+async function speakGemini(text) {
+  _stopGeminiAudio();
+  let data;
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    data = await res.json();
+  } catch(e) {
+    console.warn('Gemini TTS fetch failed, falling back:', e);
+    return speakWebSpeech(text, 0.9);
+  }
+  if (!data.audio) {
+    console.warn('Gemini TTS: no audio returned', data);
+    return speakWebSpeech(text, 0.9);
+  }
+  const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+  const ctx = _getAudioCtx();
+  const buf = ctx.createBuffer(1, bytes.length / 2, 24000);
+  const ch = buf.getChannelData(0);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < ch.length; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+  return new Promise(resolve => {
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.onended = resolve;
+    src.start();
+    _currentSource = src;
+  });
+}
+
+// ── Web Speech (local) ──
+function speakWebSpeech(text, rate) {
+  speechSynthesis.cancel();
+  return new Promise(resolve => {
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = 'ja-JP';
+    if (jaVoice) utt.voice = jaVoice;
+    utt.rate = rate || 0.9;
+    utt.onend = resolve;
+    speechSynthesis.speak(utt);
+  });
+}
+
+// ── Main entry point ── returns a Promise that resolves when audio ends
+function speak(text, rate) {
+  if (USE_GEMINI) return speakGemini(text);
+  return speakWebSpeech(text, rate);
+}
+
+function flash(el, cls) {
+  el.classList.add(cls || 'flash');
+  setTimeout(() => el.classList.remove(cls || 'flash'), 700);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.panel).classList.add('active');
+    // Stop any running chart playlist when leaving the Sound Chart tab
+    if (tab.dataset.panel !== 'chart' && typeof stopChartSeq === 'function') stopChartSeq();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SOUND CHART DATA
+// ═══════════════════════════════════════════════════════════════════════
+const chartData = [
+  {
+    label: 'Basic (清音)',
+    rows: [
+      { label: 'あ行', sounds: [['あ','a'],['い','i'],['う','u'],['え','e'],['お','o']] },
+      { label: 'か行', sounds: [['か','ka'],['き','ki'],['く','ku'],['け','ke'],['こ','ko']] },
+      { label: 'さ行', sounds: [['さ','sa'],['し','shi'],['す','su'],['せ','se'],['そ','so']] },
+      { label: 'た行', sounds: [['た','ta'],['ち','chi'],['つ','tsu'],['て','te'],['と','to']] },
+      { label: 'な行', sounds: [['な','na'],['に','ni'],['ぬ','nu'],['ね','ne'],['の','no']] },
+      { label: 'は行', sounds: [['は','ha'],['ひ','hi'],['ふ','fu'],['へ','he'],['ほ','ho']] },
+      { label: 'ま行', sounds: [['ま','ma'],['み','mi'],['む','mu'],['め','me'],['も','mo']] },
+      { label: 'や行', sounds: [['や','ya'],null,['ゆ','yu'],null,['よ','yo']] },
+      { label: 'ら行', sounds: [['ら','ra'],['り','ri'],['る','ru'],['れ','re'],['ろ','ro']], highlight: true },
+      { label: 'わ行', sounds: [['わ','wa'],null,null,null,['を','wo']] },
+      { label: 'ん',   sounds: [['ん','n'],null,null,null,null] },
+    ]
+  },
+  {
+    label: 'Voiced (濁音・半濁音)',
+    rows: [
+      { label: 'が行', sounds: [['が','ga'],['ぎ','gi'],['ぐ','gu'],['げ','ge'],['ご','go']] },
+      { label: 'ざ行', sounds: [['ざ','za'],['じ','ji'],['ず','zu'],['ぜ','ze'],['ぞ','zo']] },
+      { label: 'だ行', sounds: [['だ','da'],['ぢ','ji'],['づ','zu'],['で','de'],['ど','do']] },
+      { label: 'ば行', sounds: [['ば','ba'],['び','bi'],['ぶ','bu'],['べ','be'],['ぼ','bo']] },
+      { label: 'ぱ行', sounds: [['ぱ','pa'],['ぴ','pi'],['ぷ','pu'],['ぺ','pe'],['ぽ','po']] },
+    ]
+  },
+  {
+    label: 'Combination (拗音)',
+    rows: [
+      { label: 'きゃ', sounds: [['きゃ','kya'],null,['きゅ','kyu'],null,['きょ','kyo']] },
+      { label: 'しゃ', sounds: [['しゃ','sha'],null,['しゅ','shu'],null,['しょ','sho']] },
+      { label: 'ちゃ', sounds: [['ちゃ','cha'],null,['ちゅ','chu'],null,['ちょ','cho']] },
+      { label: 'にゃ', sounds: [['にゃ','nya'],null,['にゅ','nyu'],null,['にょ','nyo']] },
+      { label: 'ひゃ', sounds: [['ひゃ','hya'],null,['ひゅ','hyu'],null,['ひょ','hyo']] },
+      { label: 'みゃ', sounds: [['みゃ','mya'],null,['みゅ','myu'],null,['みょ','myo']] },
+      { label: 'りゃ', sounds: [['りゃ','rya'],null,['りゅ','ryu'],null,['りょ','ryo']], highlight: true },
+      { label: 'ぎゃ', sounds: [['ぎゃ','gya'],null,['ぎゅ','gyu'],null,['ぎょ','gyo']] },
+      { label: 'じゃ', sounds: [['じゃ','ja'],null,['じゅ','ju'],null,['じょ','jo']] },
+      { label: 'びゃ', sounds: [['びゃ','bya'],null,['びゅ','byu'],null,['びょ','byo']] },
+      { label: 'ぴゃ', sounds: [['ぴゃ','pya'],null,['ぴゅ','pyu'],null,['ぴょ','pyo']] },
+    ]
+  },
+  // ── KATAKANA ──
+  { label: 'separator', separator: true },
+  {
+    label: 'Katakana — Basic (片仮名 清音)',
+    note: 'Exactly the same sounds as hiragana — different shapes. Used for loanwords, foreign names, emphasis.',
+    katakana: true,
+    rows: [
+      { label: 'ア行', sounds: [['ア','a'],['イ','i'],['ウ','u'],['エ','e'],['オ','o']] },
+      { label: 'カ行', sounds: [['カ','ka'],['キ','ki'],['ク','ku'],['ケ','ke'],['コ','ko']] },
+      { label: 'サ行', sounds: [['サ','sa'],['シ','shi'],['ス','su'],['セ','se'],['ソ','so']] },
+      { label: 'タ行', sounds: [['タ','ta'],['チ','chi'],['ツ','tsu'],['テ','te'],['ト','to']] },
+      { label: 'ナ行', sounds: [['ナ','na'],['ニ','ni'],['ヌ','nu'],['ネ','ne'],['ノ','no']] },
+      { label: 'ハ行', sounds: [['ハ','ha'],['ヒ','hi'],['フ','fu'],['ヘ','he'],['ホ','ho']] },
+      { label: 'マ行', sounds: [['マ','ma'],['ミ','mi'],['ム','mu'],['メ','me'],['モ','mo']] },
+      { label: 'ヤ行', sounds: [['ヤ','ya'],null,['ユ','yu'],null,['ヨ','yo']] },
+      { label: 'ラ行', sounds: [['ラ','ra'],['リ','ri'],['ル','ru'],['レ','re'],['ロ','ro']], highlight: true },
+      { label: 'ワ行', sounds: [['ワ','wa'],null,null,null,['ヲ','wo']] },
+      { label: 'ン',   sounds: [['ン','n'],null,null,null,null] },
+      { label: 'ー',   sounds: [['ー','— (long vowel)'],null,null,null,null] },
+    ]
+  },
+  {
+    label: 'Katakana — Voiced (濁音・半濁音)',
+    katakana: true,
+    rows: [
+      { label: 'ガ行', sounds: [['ガ','ga'],['ギ','gi'],['グ','gu'],['ゲ','ge'],['ゴ','go']] },
+      { label: 'ザ行', sounds: [['ザ','za'],['ジ','ji'],['ズ','zu'],['ゼ','ze'],['ゾ','zo']] },
+      { label: 'ダ行', sounds: [['ダ','da'],['ヂ','ji'],['ヅ','zu'],['デ','de'],['ド','do']] },
+      { label: 'バ行', sounds: [['バ','ba'],['ビ','bi'],['ブ','bu'],['ベ','be'],['ボ','bo']] },
+      { label: 'パ行', sounds: [['パ','pa'],['ピ','pi'],['プ','pu'],['ペ','pe'],['ポ','po']] },
+    ]
+  },
+  {
+    label: 'Katakana — Combination (拗音)',
+    katakana: true,
+    rows: [
+      { label: 'キャ', sounds: [['キャ','kya'],null,['キュ','kyu'],null,['キョ','kyo']] },
+      { label: 'シャ', sounds: [['シャ','sha'],null,['シュ','shu'],null,['ショ','sho']] },
+      { label: 'チャ', sounds: [['チャ','cha'],null,['チュ','chu'],null,['チョ','cho']] },
+      { label: 'ニャ', sounds: [['ニャ','nya'],null,['ニュ','nyu'],null,['ニョ','nyo']] },
+      { label: 'ヒャ', sounds: [['ヒャ','hya'],null,['ヒュ','hyu'],null,['ヒョ','hyo']] },
+      { label: 'ミャ', sounds: [['ミャ','mya'],null,['ミュ','myu'],null,['ミョ','myo']] },
+      { label: 'リャ', sounds: [['リャ','rya'],null,['リュ','ryu'],null,['リョ','ryo']], highlight: true },
+      { label: 'ギャ', sounds: [['ギャ','gya'],null,['ギュ','gyu'],null,['ギョ','gyo']] },
+      { label: 'ジャ', sounds: [['ジャ','ja'],null,['ジュ','ju'],null,['ジョ','jo']] },
+      { label: 'ビャ', sounds: [['ビャ','bya'],null,['ビュ','byu'],null,['ビョ','byo']] },
+      { label: 'ピャ', sounds: [['ピャ','pya'],null,['ピュ','pyu'],null,['ピョ','pyo']] },
+    ]
+  }
+];
+
+// Build chart
+const chartContainer = document.getElementById('chart-container');
+
+// ── Playlist state ──
+let chartSeqStop = false;
+let chartSeqBtn = null;  // currently-playing button
+
+function stopChartSeq() {
+  chartSeqStop = true;
+  if (USE_GEMINI) { _stopGeminiAudio(); }
+  else { speechSynthesis.cancel(); }
+  if (chartSeqBtn) {
+    chartSeqBtn.textContent = '▶ Play all';
+    chartSeqBtn.classList.remove('playing');
+    chartSeqBtn = null;
+  }
+}
+
+function playChartSeq(items, btn) {
+  if (chartSeqBtn === btn) { stopChartSeq(); return; }
+  stopChartSeq();
+
+  chartSeqStop = false;
+  chartSeqBtn = btn;
+  btn.textContent = '⏹ Stop';
+  btn.classList.add('playing');
+
+  let i = 0;
+  async function next() {
+    if (chartSeqStop || i >= items.length) {
+      btn.textContent = '▶ Play all';
+      btn.classList.remove('playing');
+      chartSeqBtn = null;
+      return;
+    }
+    const { text, cell } = items[i++];
+    flash(cell);
+    await speak(text, 0.9);
+    if (!chartSeqStop) setTimeout(next, 150);
+  }
+  next();
+}
+
+chartData.forEach(group => {
+  if (group.separator) {
+    const div = document.createElement('div');
+    div.style.cssText = 'border-top:2px solid #1565c0; margin:28px 0 20px; position:relative;';
+    div.innerHTML = '<span style="position:absolute;top:-11px;left:0;background:#f4f4f4;padding:0 10px;color:#1565c0;font-size:0.85rem;font-weight:600;letter-spacing:0.05em;">KATAKANA (片仮名)</span>';
+    chartContainer.appendChild(div);
+    return;
+  }
+
+  const sec = document.createElement('div');
+  sec.className = 'chart-group';
+
+  // Header: label + play-all button
+  const hdr = document.createElement('div');
+  hdr.className = 'chart-group-hdr';
+  const h3 = document.createElement('h3');
+  h3.textContent = group.label;
+  if (group.katakana) h3.style.color = '#1565c0';
+  const playBtn = document.createElement('button');
+  playBtn.className = 'play-all-btn';
+  playBtn.textContent = '▶ Play all';
+  if (group.katakana) { playBtn.style.background = '#1565c0'; }
+  hdr.appendChild(h3);
+  hdr.appendChild(playBtn);
+  sec.appendChild(hdr);
+
+  if (group.note) {
+    const note = document.createElement('p');
+    note.style.cssText = 'font-size:0.82rem;color:#555;margin-bottom:10px;line-height:1.5;';
+    note.textContent = group.note;
+    sec.appendChild(note);
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'kana-grid';
+  const groupItems = []; // {text, cell} for playlist
+
+  group.rows.forEach(row => {
+    row.sounds.forEach(s => {
+      const cell = document.createElement('div');
+      if (!s) {
+        cell.style.width = '60px'; // spacer
+      } else {
+        cell.className = 'kana-cell' + (row.highlight ? ' ra-highlight' : '');
+        if (group.katakana) cell.style.borderColor = '#90caf9';
+        cell.innerHTML = `<span class="kana-char">${s[0]}</span><span class="kana-ro">${s[1]}</span>`;
+        cell.addEventListener('click', () => { speak(s[0]); flash(cell); });
+        groupItems.push({ text: s[0], cell });
+      }
+      grid.appendChild(cell);
+    });
+  });
+
+  playBtn.addEventListener('click', () => playChartSeq(groupItems, playBtn));
+
+  sec.appendChild(grid);
+  chartContainer.appendChild(sec);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// LONG VOWELS
+// ═══════════════════════════════════════════════════════════════════════
+const lvPairs = [
+  { a: ['おじさん','uncle / middle-aged man'], b: ['おじいさん','grandfather / old man'] },
+  { a: ['おばさん','aunt / middle-aged woman'], b: ['おばあさん','grandmother / old woman'] },
+  { a: ['ゆき','snow (雪)'], b: ['ゆうき','courage (勇気)'] },
+  { a: ['きて','come! / put it on!'], b: ['きいて','listen!'] },
+  { a: ['ここ','here'], b: ['こうこう','high school (高校)'] },
+  { a: ['とる','to take (取る)'], b: ['とおる','to pass through (通る)'] },
+];
+
+const lvContainer = document.getElementById('lv-pairs');
+lvPairs.forEach(p => {
+  const row = document.createElement('div');
+  row.className = 'pair-row';
+
+  const btnA = makePairBtn(p.a[0], p.a[1]);
+  const vs = document.createElement('div');
+  vs.className = 'pair-vs';
+  vs.textContent = 'VS';
+  const btnB = makePairBtn(p.b[0], p.b[1]);
+
+  row.appendChild(btnA);
+  row.appendChild(vs);
+  row.appendChild(btnB);
+  lvContainer.appendChild(row);
+});
+
+function makePairBtn(word, meaning) {
+  const btn = document.createElement('button');
+  btn.className = 'pair-btn';
+  btn.innerHTML = `<div class="pw-word">${word}</div><div class="pw-meaning">${meaning}</div>`;
+  btn.addEventListener('click', () => { speak(word, 0.75); flash(btn); });
+  return btn;
+}
+
+// Long vowel quiz
+let lvQuizActive = false;
+let lvCurrentPair = null;
+let lvCurrentChoice = null;
+
+document.getElementById('lv-quiz-start').addEventListener('click', startLvQuiz);
+
+function startLvQuiz() {
+  lvCurrentPair = lvPairs[Math.floor(Math.random() * lvPairs.length)];
+  const choices = Math.random() < 0.5
+    ? { played: lvCurrentPair.a, other: lvCurrentPair.b }
+    : { played: lvCurrentPair.b, other: lvCurrentPair.a };
+  lvCurrentChoice = choices;
+
+  const area = document.getElementById('lv-quiz-q');
+  area.style.display = 'block';
+
+  // Shuffle display order
+  const opts = [choices.played, choices.other].sort(() => Math.random() - 0.5);
+
+  area.innerHTML = `
+    <div style="margin-bottom:10px;">
+      <button class="btn btn-red" id="lv-play-q">▶ Play</button>
+      <span style="font-size:0.82rem; color:#888; margin-left:10px;">Which word did you hear?</span>
+    </div>
+    <div style="display:flex; gap:10px;">
+      ${opts.map(o => `<button class="pair-btn lv-opt" data-word="${o[0]}">${o[0]}</button>`).join('')}
+    </div>
+    <div id="lv-quiz-result" style="margin-top:10px; font-weight:500; min-height:22px;"></div>
+    <button class="btn" style="margin-top:10px; background:#eee; color:#333;" id="lv-next-q">Next</button>
+  `;
+
+  document.getElementById('lv-play-q').addEventListener('click', () => speak(choices.played[0], 0.75));
+  speak(choices.played[0], 0.75);
+
+  area.querySelectorAll('.lv-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const correct = btn.dataset.word === choices.played[0];
+      document.getElementById('lv-quiz-result').textContent = correct
+        ? `✓ Correct! "${choices.played[0]}" = ${choices.played[1]}`
+        : `✗ That was "${choices.played[0]}" = ${choices.played[1]}`;
+      document.getElementById('lv-quiz-result').style.color = correct ? '#2e7d32' : '#c62828';
+      area.querySelectorAll('.lv-opt').forEach(b => b.disabled = true);
+    });
+  });
+
+  document.getElementById('lv-next-q').addEventListener('click', startLvQuiz);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DOUBLE CONSONANTS (SOKUON)
+// ═══════════════════════════════════════════════════════════════════════
+const skPairs = [
+  {
+    a: { word: 'きて', meaning: 'come! / put it on!', morae: ['き','て'] },
+    b: { word: 'きって', meaning: 'postage stamp / cut!', morae: ['き','っ','て'] },
+  },
+  {
+    a: { word: 'いた', meaning: 'was there / board', morae: ['い','た'] },
+    b: { word: 'いった', meaning: 'went / said', morae: ['い','っ','た'] },
+  },
+  {
+    a: { word: 'かこ', meaning: 'the past (過去)', morae: ['か','こ'] },
+    b: { word: 'かっこ', meaning: 'brackets / cool-looking (格好)', morae: ['か','っ','こ'] },
+  },
+  {
+    a: { word: 'さき', meaning: 'ahead / tip (先)', morae: ['さ','き'] },
+    b: { word: 'さっき', meaning: 'a moment ago', morae: ['さ','っ','き'] },
+  },
+  {
+    a: { word: 'おと', meaning: 'sound (音)', morae: ['お','と'] },
+    b: { word: 'おっと', meaning: 'husband (夫)', morae: ['お','っ','と'] },
+  },
+];
+
+const skContainer = document.getElementById('sk-pairs');
+skPairs.forEach(p => {
+  const row = document.createElement('div');
+  row.className = 'pair-row';
+
+  const btnA = makeSkBtn(p.a);
+  const vs = document.createElement('div');
+  vs.className = 'pair-vs';
+  vs.textContent = 'VS';
+  const btnB = makeSkBtn(p.b);
+
+  row.appendChild(btnA);
+  row.appendChild(vs);
+  row.appendChild(btnB);
+  skContainer.appendChild(row);
+});
+
+function makeSkBtn(item) {
+  const beats = item.morae.map(m => {
+    if (m === 'っ') return `<div class="beat beat-sokuon" title="silent pause">pause</div>`;
+    return `<div class="beat beat-regular">${m}</div>`;
+  }).join('');
+
+  const btn = document.createElement('button');
+  btn.className = 'pair-btn';
+  btn.innerHTML = `
+    <div class="pw-word">${item.word}</div>
+    <div class="pw-meaning">${item.meaning}</div>
+    <div class="mora-beats">${beats}</div>
+  `;
+  btn.addEventListener('click', () => { speak(item.word, 0.7); flash(btn); });
+  return btn;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RA ROW
+// ═══════════════════════════════════════════════════════════════════════
+const raSounds = [
+  ['ら','ra'], ['り','ri'], ['る','ru'], ['れ','re'], ['ろ','ro']
+];
+const raWordGroups = [
+  { label: 'ら words', words: [['らく','easy (楽)'],['ラジオ','radio'],['らいねん','next year']] },
+  { label: 'り words', words: [['りんご','apple'],['りゆう','reason'],['りょこう','travel']] },
+  { label: 'る words', words: [['るす','away from home'],['ルール','rule'],['るーむ','room']] },
+  { label: 'れ words', words: [['れい','zero / example'],['れんしゅう','practice'],['れすとらん','restaurant']] },
+  { label: 'ろ words', words: [['ろく','six'],['ろうか','hallway'],['ろんぶん','thesis / paper']] },
+];
+
+const raCardsEl = document.getElementById('ra-cards');
+raSounds.forEach(s => {
+  const card = document.createElement('div');
+  card.className = 'ra-card';
+  card.innerHTML = `<div class="ra-kana">${s[0]}</div><div class="ra-ro">${s[1]}</div>`;
+  card.addEventListener('click', () => { speak(s[0], 0.8); flash(card); });
+  raCardsEl.appendChild(card);
+});
+
+const raWordsEl = document.getElementById('ra-words');
+raWordGroups.forEach(g => {
+  const row = document.createElement('div');
+  row.style.marginBottom = '10px';
+  const label = document.createElement('div');
+  label.style.cssText = 'font-size:0.8rem; color:#888; margin-bottom:5px;';
+  label.textContent = g.label;
+  row.appendChild(label);
+  const chips = document.createElement('div');
+  chips.className = 'words-row';
+  g.words.forEach(w => {
+    const chip = document.createElement('button');
+    chip.className = 'word-chip';
+    chip.innerHTML = `${w[0]} <span style="font-size:0.75rem; color:#999;">${w[1]}</span>`;
+    chip.addEventListener('click', () => { speak(w[0], 0.75); flash(chip); });
+    chips.appendChild(chip);
+  });
+  row.appendChild(chips);
+  raWordsEl.appendChild(row);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// PITCH ACCENT
+// ═══════════════════════════════════════════════════════════════════════
+// pattern: array of 0 (low) or 1 (high) per mora
+// sentence: full sentence for TTS — gives the word natural pitch context
+const pitchPairs = [
+  [
+    { word: '雨', read: 'あめ', mean: 'rain',       morae: ['あ','め'], pat: [0,1], note: 'Low → High', sentence: '雨が降っています。' },
+    { word: '飴', read: 'あめ', mean: 'candy',      morae: ['あ','め'], pat: [1,0], note: 'High → Low', sentence: '飴を食べます。' },
+  ],
+  [
+    { word: '橋', read: 'はし', mean: 'bridge',     morae: ['は','し'], pat: [0,1], note: 'Low → High', sentence: '橋を渡ります。' },
+    { word: '箸', read: 'はし', mean: 'chopsticks', morae: ['は','し'], pat: [1,0], note: 'High → Low', sentence: '箸で食べます。' },
+  ],
+];
+
+const commonPitchWords = [
+  { word: '犬',  read: 'いぬ',   mean: 'dog',          morae: ['い','ぬ'],       pat: [1,0], note: '↓ atamadaka', sentence: '犬が好きです。' },
+  { word: '猫',  read: 'ねこ',   mean: 'cat',          morae: ['ね','こ'],       pat: [0,1], note: '↑ odaka',     sentence: '部屋に猫がいます。' },
+  { word: '花',  read: 'はな',   mean: 'flower',       morae: ['は','な'],       pat: [1,0], note: '↓ atamadaka', sentence: '花がきれいです。' },
+  { word: '山',  read: 'やま',   mean: 'mountain',     morae: ['や','ま'],       pat: [0,1], note: '↑ odaka',     sentence: '山に登ります。' },
+  { word: '川',  read: 'かわ',   mean: 'river',        morae: ['か','わ'],       pat: [0,1], note: '↑ odaka',     sentence: '川で泳ぎます。' },
+  { word: '水',  read: 'みず',   mean: 'water',        morae: ['み','ず'],       pat: [0,1], note: '↑ odaka',     sentence: '水を飲みます。' },
+  { word: '空',  read: 'そら',   mean: 'sky',          morae: ['そ','ら'],       pat: [1,0], note: '↓ atamadaka', sentence: '空が青いです。' },
+  { word: '明日', read: 'あした', mean: 'tomorrow',     morae: ['あ','し','た'],  pat: [1,0,0], note: '↓ atamadaka', sentence: '明日、学校に行きます。' },
+  { word: '時計', read: 'とけい', mean: 'clock/watch',  morae: ['と','け','い'],  pat: [0,1,0], note: '↓ nakadaka',  sentence: '時計を見ます。' },
+  { word: '魚',  read: 'さかな', mean: 'fish',         morae: ['さ','か','な'],  pat: [0,1,1], note: 'flat (heiban)', sentence: '魚を食べます。' },
+  { word: '桜',  read: 'さくら', mean: 'cherry blossom', morae: ['さ','く','ら'], pat: [0,1,1], note: 'flat (heiban)', sentence: '桜がきれいです。' },
+  { word: '左',  read: 'ひだり', mean: 'left',         morae: ['ひ','だ','り'],  pat: [1,0,0], note: '↓ atamadaka', sentence: '左に曲がります。' },
+  { word: '右',  read: 'みぎ',   mean: 'right',        morae: ['み','ぎ'],       pat: [0,1], note: '↑ odaka',       sentence: '右に曲がります。' },
+];
+
+function buildPitchCard(item) {
+  const card = document.createElement('div');
+  card.className = 'pitch-card';
+
+  const pd = document.createElement('div');
+  pd.className = 'pd';
+  item.morae.forEach((m, i) => {
+    const pm = document.createElement('div');
+    pm.className = 'pm ' + (item.pat[i] ? 'hi' : 'lo');
+    const box = document.createElement('div');
+    box.className = 'pm-box';
+    box.textContent = m;
+    pm.appendChild(box);
+    pd.appendChild(pm);
+  });
+
+  card.innerHTML = `
+    <div class="pc-word">${item.word}</div>
+    <div class="pc-read">${item.read}</div>
+    <div class="pc-mean">${item.mean}</div>
+    <div class="pc-note">${item.note}</div>
+  `;
+  card.insertBefore(pd, card.firstChild);
+  card.addEventListener('click', () => { speak(item.read, 0.8); flash(card); });
+
+  // Sentence button (if available) — better pitch context than isolated word
+  if (item.sentence) {
+    const sBtn = document.createElement('button');
+    sBtn.style.cssText = 'display:block; width:100%; margin-top:7px; background:#f3e5f5; border:1px solid #ce93d8; border-radius:5px; padding:4px 6px; font-size:0.68rem; cursor:pointer; color:#4a148c; line-height:1.4; text-align:center;';
+    sBtn.title = 'Hear in a sentence — pitch is more natural in context';
+    sBtn.innerHTML = `▶ <em>${item.sentence}</em>`;
+    sBtn.addEventListener('click', (e) => { e.stopPropagation(); speak(item.sentence, 0.8); });
+    card.appendChild(sBtn);
+  }
+
+  return card;
+}
+
+// Minimal pair rows
+const pitchPairsArea = document.getElementById('pitch-pairs-area');
+pitchPairs.forEach(pair => {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:10px; margin-bottom:4px; flex-wrap:wrap; align-items:center;';
+
+  pair.forEach((item, idx) => {
+    const card = buildPitchCard(item);
+    card.style.width = '150px';
+    // Word alone — click card
+    card.title = 'Click: hear word alone';
+    row.appendChild(card);
+    if (idx === 0) {
+      const vs = document.createElement('div');
+      vs.className = 'pair-vs';
+      vs.textContent = 'VS';
+      row.appendChild(vs);
+    }
+  });
+  pitchPairsArea.appendChild(row);
+
+  // Sentence buttons below the pair
+  const sentRow = document.createElement('div');
+  sentRow.style.cssText = 'display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;';
+  pair.forEach(item => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex; flex-direction:column; gap:4px; width:150px;';
+    const sentBtn = document.createElement('button');
+    sentBtn.style.cssText = 'background:#f3e5f5; border:1px solid #ce93d8; border-radius:6px; padding:5px 8px; font-size:0.75rem; cursor:pointer; color:#4a148c; text-align:left; line-height:1.4;';
+    sentBtn.innerHTML = `▶ <em>${item.sentence}</em>`;
+    sentBtn.title = 'Hear in a sentence — pitch is more natural in context';
+    sentBtn.addEventListener('click', () => speak(item.sentence, 0.8));
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:0.68rem; color:#aaa; text-align:center;';
+    hint.textContent = '▲ sentence = clearer pitch';
+    wrap.appendChild(sentBtn);
+    wrap.appendChild(hint);
+    sentRow.appendChild(wrap);
+  });
+  pitchPairsArea.appendChild(sentRow);
+});
+
+// Common words grid
+const pitchGrid = document.getElementById('pitch-grid');
+commonPitchWords.forEach(w => pitchGrid.appendChild(buildPitchCard(w)));
+
+// ═══════════════════════════════════════════════════════════════════════
+// PRACTICE MODE
+// ═══════════════════════════════════════════════════════════════════════
+// Flat list of all basic kana (non-null from first group)
+const pracPool = [];
+chartData[0].rows.forEach(row => {
+  row.sounds.forEach(s => { if (s) pracPool.push(s); });
+});
+
+let pracCorrect = 0;
+let pracTotal = 0;
+let pracCurrentKana = null;
+let pracAnswered = false;
+
+function pracNewQuestion() {
+  pracAnswered = false;
+  document.getElementById('prac-feedback').textContent = '';
+  document.getElementById('prac-next').style.display = 'none';
+
+  // Pick correct answer
+  pracCurrentKana = pracPool[Math.floor(Math.random() * pracPool.length)];
+
+  // Pick 3 wrong distractors (different kana)
+  const distractors = [];
+  while (distractors.length < 3) {
+    const d = pracPool[Math.floor(Math.random() * pracPool.length)];
+    if (d[0] !== pracCurrentKana[0] && !distractors.find(x => x[0] === d[0])) {
+      distractors.push(d);
+    }
+  }
+  const options = [pracCurrentKana, ...distractors].sort(() => Math.random() - 0.5);
+
+  const container = document.getElementById('prac-options');
+  container.innerHTML = '';
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'opt-btn';
+    btn.textContent = opt[0];
+    btn.addEventListener('click', () => pracAnswer(btn, opt[0] === pracCurrentKana[0]));
+    container.appendChild(btn);
+  });
+
+  // Auto-play
+  speak(pracCurrentKana[0], 0.85);
+}
+
+function pracAnswer(btn, correct) {
+  if (pracAnswered) return;
+  pracAnswered = true;
+  pracTotal++;
+
+  if (correct) {
+    pracCorrect++;
+    btn.classList.add('correct');
+    document.getElementById('prac-feedback').textContent = `✓ Correct! ${pracCurrentKana[0]} = ${pracCurrentKana[1]}`;
+    document.getElementById('prac-feedback').style.color = '#2e7d32';
+  } else {
+    btn.classList.add('wrong');
+    // Show correct answer
+    document.querySelectorAll('.opt-btn').forEach(b => {
+      if (b.textContent === pracCurrentKana[0]) b.classList.add('correct');
+    });
+    document.getElementById('prac-feedback').textContent = `✗ That was ${pracCurrentKana[0]} = ${pracCurrentKana[1]}`;
+    document.getElementById('prac-feedback').style.color = '#c62828';
+  }
+
+  document.querySelectorAll('.opt-btn').forEach(b => b.disabled = true);
+  document.getElementById('prac-score').innerHTML = `Score: <span id="prac-correct">${pracCorrect}</span> / <span id="prac-total">${pracTotal}</span>`;
+  document.getElementById('prac-next').style.display = 'block';
+}
+
+document.getElementById('prac-play').addEventListener('click', () => {
+  if (pracCurrentKana) speak(pracCurrentKana[0], 0.85);
+  else pracNewQuestion();
+});
+
+document.getElementById('prac-next-btn').addEventListener('click', pracNewQuestion);
+document.getElementById('prac-reset-btn').addEventListener('click', () => {
+  pracCorrect = 0; pracTotal = 0;
+  document.getElementById('prac-score').innerHTML = 'Score: <span id="prac-correct">0</span> / <span id="prac-total">0</span>';
+  pracNewQuestion();
+});
+
+// Start first question when Practice tab is opened
+document.querySelector('[data-panel="practice"]').addEventListener('click', () => {
+  if (!pracCurrentKana) pracNewQuestion();
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// SHADOWING DRILL
+// ═══════════════════════════════════════════════════════════════════════
+const shadWords = {
+  // pitch: array of 0 (low) 1 (high) per mora. null = unknown, not shown.
+  longvowel: [
+    { text: 'おじさん',   kanji: '叔父さん', reading: 'ojisan',  meaning: 'uncle',        pitch: null,       sentence: '叔父さんが来ます。' },
+    { text: 'おじいさん', kanji: 'お爺さん', reading: 'ojiisan', meaning: 'grandfather',  pitch: null,       sentence: 'お爺さんはとても元気です。' },
+    { text: 'おばさん',   kanji: '叔母さん', reading: 'obasan',  meaning: 'aunt',         pitch: null,       sentence: '叔母さんにプレゼントをあげます。' },
+    { text: 'おばあさん', kanji: 'お婆さん', reading: 'obaasan', meaning: 'grandmother',  pitch: null,       sentence: 'お婆さんはお茶を飲みます。' },
+    { text: 'ゆき',       kanji: '雪',       reading: 'yuki',    meaning: 'snow',         pitch: [0,1],      sentence: '外に雪が降っています。' },
+    { text: 'ゆうき',     kanji: '勇気',     reading: 'yuuki',   meaning: 'courage',      pitch: [0,1,1],    sentence: '勇気を持って話します。' },
+    { text: 'きいて',     kanji: '聞いて',   reading: 'kiite',   meaning: 'listen!',      pitch: [1,0,0],    sentence: '音楽を聞いてください。' },
+    { text: 'こうこう',   kanji: '高校',     reading: 'koukou',  meaning: 'high school',  pitch: [1,0,0,0],  sentence: '高校に入学しました。' },
+    { text: 'おかあさん', kanji: 'お母さん', reading: 'okaasan', meaning: 'mother',       pitch: null,       sentence: 'お母さんがご飯を作ります。' },
+    { text: 'おとうさん', kanji: 'お父さん', reading: 'otousan', meaning: 'father',       pitch: null,       sentence: 'お父さんは会社に行きます。' },
+  ],
+  sokuon: [
+    { text: 'きって',  kanji: '切手',  reading: 'kitte',  meaning: 'postage stamp',   pitch: [1,0,0], sentence: '切手を貼ります。' },
+    { text: 'いった',  kanji: '行った',reading: 'itta',   meaning: 'went / said',     pitch: [1,0,0], sentence: '先週、東京に行ったんです。' },
+    { text: 'かっこ',  kanji: '括弧',  reading: 'kakko',  meaning: 'brackets / cool', pitch: [1,0,0], sentence: '括弧の中に書きます。' },
+    { text: 'さっき',  kanji: null,    reading: 'sakki',  meaning: 'a moment ago',    pitch: [1,0,0], sentence: 'さっき電話がありました。' },
+    { text: 'おっと',  kanji: '夫',    reading: 'otto',   meaning: 'husband',         pitch: [1,0,0], sentence: '夫と一緒に料理します。' },
+    { text: 'ざっし',  kanji: '雑誌',  reading: 'zasshi', meaning: 'magazine',        pitch: [1,0,0], sentence: '雑誌を読みます。' },
+    { text: 'きっぷ',  kanji: '切符',  reading: 'kippu',  meaning: 'ticket',          pitch: [1,0,0], sentence: '電車の切符を買います。' },
+    { text: 'きっと',  kanji: null,    reading: 'kitto',  meaning: 'surely',          pitch: [1,0,0], sentence: 'きっと大丈夫ですよ。' },
+  ],
+  ra: [
+    { text: 'りんご',     kanji: '林檎', reading: 'ringo',   meaning: 'apple',            pitch: [0,1,1],   sentence: 'りんごを食べます。' },
+    { text: 'らいねん',   kanji: '来年', reading: 'rainen',  meaning: 'next year',        pitch: [0,1,1,1], sentence: '来年、日本に行きたいです。' },
+    { text: 'れんしゅう', kanji: '練習', reading: 'renshuu', meaning: 'practice',         pitch: [0,1,1,1], sentence: '毎日練習します。' },
+    { text: 'りょこう',   kanji: '旅行', reading: 'ryokou',  meaning: 'travel',           pitch: [0,1,1,1], sentence: '旅行が大好きです。' },
+    { text: 'ろく',       kanji: '六',   reading: 'roku',    meaning: 'six',              pitch: [1,0],     sentence: '六時に起きます。' },
+    { text: 'れい',       kanji: '零',   reading: 'rei',     meaning: 'zero / example',   pitch: [0,1],     sentence: 'この例を見てください。' },
+    { text: 'るす',       kanji: '留守', reading: 'rusu',    meaning: 'away from home',   pitch: [1,0],     sentence: '今、留守にしています。' },
+    { text: 'らく',       kanji: '楽',   reading: 'raku',    meaning: 'easy',             pitch: [0,1],     sentence: 'この仕事はとても楽です。' },
+  ],
+  common: [
+    { text: 'ありがとう',   kanji: '有難う',    reading: 'arigatou',   meaning: 'thank you',      pitch: [0,1,1,1,1],   sentence: '助けてくれて、ありがとう。' },
+    { text: 'すみません',   kanji: '済みません',reading: 'sumimasen',  meaning: 'excuse me',      pitch: [0,1,1,1,1],   sentence: 'すみません、ちょっといいですか。' },
+    { text: 'おはよう',     kanji: 'お早う',    reading: 'ohayou',     meaning: 'good morning',   pitch: [0,1,1,1],     sentence: 'おはよう、今日も元気ですか。' },
+    { text: 'たべる',       kanji: '食べる',    reading: 'taberu',     meaning: 'to eat',         pitch: [0,1,0],       sentence: '夕食は何を食べますか。' },
+    { text: 'のむ',         kanji: '飲む',      reading: 'nomu',       meaning: 'to drink',       pitch: [0,1],         sentence: '朝は水を飲みます。' },
+    { text: 'がっこう',     kanji: '学校',      reading: 'gakkou',     meaning: 'school',         pitch: [0,1,1,1],     sentence: '毎日学校に歩いて行きます。' },
+    { text: 'でんしゃ',     kanji: '電車',      reading: 'densha',     meaning: 'train',          pitch: [1,0,0,0],     sentence: '電車で会社に行きます。' },
+    { text: 'ともだち',     kanji: '友達',      reading: 'tomodachi',  meaning: 'friend',         pitch: [0,1,1,1],     sentence: '友達と映画を見ます。' },
+    { text: 'おいしい',     kanji: '美味しい',  reading: 'oishii',     meaning: 'delicious',      pitch: [0,1,1,1],     sentence: 'このラーメンは美味しいですね。' },
+    { text: 'むずかしい',   kanji: '難しい',    reading: 'muzukashii', meaning: 'difficult',      pitch: [0,1,1,1,1,1], sentence: '日本語は難しいですが、楽しいです。' },
+    { text: 'たのしい',     kanji: '楽しい',    reading: 'tanoshii',   meaning: 'fun',            pitch: [0,1,1,1],     sentence: '旅行はとても楽しいです。' },
+    { text: 'やさしい',     kanji: '優しい',    reading: 'yasashii',   meaning: 'kind / gentle',  pitch: [0,1,1,1],     sentence: '先生はとても優しいです。' },
+    { text: 'ただいま',     kanji: '只今',      reading: 'tadaima',    meaning: "I'm home!",      pitch: [0,1,1,1,1],   sentence: 'ただいま、帰りました！' },
+    { text: 'いただきます', kanji: '頂きます',  reading: 'itadakimasu',meaning: "let's eat",      pitch: [0,1,1,1,1,1,1], sentence: 'では、いただきます。' },
+  ],
+  loanwords: [
+    { text: 'テレビ',       kanji: null, reading: 'terebi',    meaning: 'TV (television)',       pitch: [1,0,0],   sentence: 'テレビを見ています。' },
+    { text: 'コーヒー',     kanji: null, reading: 'koohii',    meaning: 'coffee',               pitch: [0,1,1,1], sentence: '朝、コーヒーを飲みます。' },
+    { text: 'ラーメン',     kanji: null, reading: 'raamen',    meaning: 'ramen',                pitch: [0,1,1,1], sentence: '今日のお昼はラーメンです。' },
+    { text: 'レストラン',   kanji: null, reading: 'resutoran', meaning: 'restaurant',           pitch: [0,1,1,1,1], sentence: 'あのレストランは美味しいですよ。' },
+    { text: 'バス',         kanji: null, reading: 'basu',      meaning: 'bus',                  pitch: [1,0],     sentence: 'バスで学校に行きます。' },
+    { text: 'タクシー',     kanji: null, reading: 'takushii',  meaning: 'taxi',                 pitch: [0,1,1,1], sentence: 'タクシーを呼びます。' },
+    { text: 'ホテル',       kanji: null, reading: 'hoteru',    meaning: 'hotel',                pitch: [0,1,1],   sentence: 'ホテルに泊まります。' },
+    { text: 'チケット',     kanji: null, reading: 'chiketto',  meaning: 'ticket (double っ)',    pitch: [0,1,0,0], sentence: '映画のチケットを買いました。' },
+    { text: 'ポケット',     kanji: null, reading: 'poketto',   meaning: 'pocket (double っ)',    pitch: [0,1,0,0], sentence: 'ポケットに入れます。' },
+    { text: 'ニュース',     kanji: null, reading: 'nyuusu',    meaning: 'news',                 pitch: [1,0,0],   sentence: '毎朝ニュースを見ます。' },
+    { text: 'ゲーム',       kanji: null, reading: 'geemu',     meaning: 'game',                 pitch: [1,0,0],   sentence: '友達とゲームをします。' },
+    { text: 'アパート',     kanji: null, reading: 'apaato',    meaning: 'apartment',            pitch: [0,1,1,1], sentence: '新しいアパートに引っ越しました。' },
+    { text: 'コンビニ',     kanji: null, reading: 'konbini',   meaning: 'convenience store',    pitch: [0,1,1,1], sentence: 'コンビニで買い物します。' },
+    { text: 'スマホ',       kanji: null, reading: 'sumaho',    meaning: 'smartphone',           pitch: [0,1,1],   sentence: 'スマホで写真を撮ります。' },
+  ],
+};
+
+// Merge all into one pool with category labels
+const shadAllWords = Object.entries(shadWords).flatMap(([cat, words]) =>
+  words.map(w => ({ ...w, cat }))
+);
+
+let shadActiveCat = 'all';
+let shadPool = [...shadAllWords];
+let shadCurrent = null;
+let shadCorrect = 0;
+let shadTotal = 0;
+let shadUsed = new Set();
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let shadRec = null;
+
+if (SpeechRecognition) {
+  shadRec = new SpeechRecognition();
+  shadRec.lang = 'ja-JP';
+  shadRec.interimResults = false;
+  shadRec.maxAlternatives = 5;
+} else {
+  document.getElementById('shad-no-support').style.display = 'block';
+  document.getElementById('shad-speak').disabled = true;
+  document.getElementById('shad-speak').textContent = '🎤 Chrome only';
+}
+
+function katakanaToHiragana(str) {
+  return str.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
+function cleanJP(str) {
+  // Strip punctuation and convert katakana → hiragana before comparing
+  return katakanaToHiragana(str.trim().replace(/[。、！？!?\s]/g, ''));
+}
+
+function compareMatch(expected, heard, kanji) {
+  const e = cleanJP(expected);
+  const h = cleanJP(heard);
+  if (h === e || h.includes(e) || e.includes(h)) return 'exact';
+  // Also check kanji form — recognizer often returns kanji (e.g. 雪 for ゆき)
+  if (kanji) {
+    const k = kanji.trim().replace(/[。、！？!?\s]/g, '');
+    const hRaw = heard.trim().replace(/[。、！？!?\s]/g, '');
+    if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
+  }
+  // Character overlap ratio
+  let overlap = 0;
+  for (let i = 0; i < Math.min(e.length, h.length); i++) {
+    if (e[i] === h[i]) overlap++;
+  }
+  const ratio = overlap / e.length;
+  if (ratio >= 0.7) return 'close';
+  if (ratio >= 0.4) return 'partial';
+  return 'miss';
+}
+
+function shadPickWord() {
+  // Avoid repeating until all words used
+  let candidates = shadPool.filter(w => !shadUsed.has(w.text));
+  if (candidates.length === 0) { shadUsed.clear(); candidates = shadPool; }
+  const w = candidates[Math.floor(Math.random() * candidates.length)];
+  shadUsed.add(w.text);
+  return w;
+}
+
+function shadNewWord() {
+  shadCurrent = shadPickWord();
+  const catLabels = { longvowel: 'Long Vowels', sokuon: 'Double Consonants っ', ra: 'ら行 R-Sounds', common: 'Common Vocabulary', loanwords: 'Katakana Loanwords' };
+  document.getElementById('shad-category').textContent = catLabels[shadCurrent.cat] || '';
+  document.getElementById('shad-word').textContent = shadCurrent.text;
+  document.getElementById('shad-reading').textContent = shadCurrent.reading;
+  document.getElementById('shad-meaning').textContent = shadCurrent.meaning;
+  document.getElementById('shad-result').innerHTML = '';
+  document.getElementById('shad-speak').textContent = '🎤 Speak';
+  document.getElementById('shad-speak').disabled = !SpeechRecognition;
+
+  // Update "In sentence" button
+  const sentBtn = document.getElementById('shad-sentence');
+  if (shadCurrent.sentence) {
+    sentBtn.title = `Hear in sentence: ${shadCurrent.sentence}`;
+    sentBtn.style.opacity = '1';
+    sentBtn.disabled = false;
+  } else {
+    sentBtn.style.opacity = '0.35';
+    sentBtn.disabled = true;
+  }
+
+  // Pitch accent display
+  const pitchEl = document.getElementById('shad-pitch');
+  const pitchLabel = document.getElementById('shad-pitch-label');
+  pitchEl.innerHTML = '';
+  pitchLabel.textContent = '';
+  if (shadCurrent.pitch) {
+    const morae = [...shadCurrent.text]; // split into individual characters
+    morae.forEach((m, i) => {
+      const isHigh = shadCurrent.pitch[i];
+      const pm = document.createElement('div');
+      pm.className = 'pm ' + (isHigh ? 'hi' : 'lo');
+      const box = document.createElement('div');
+      box.className = 'pm-box';
+      box.textContent = m;
+      pm.appendChild(box);
+      pitchEl.appendChild(pm);
+    });
+    pitchLabel.textContent = '■ high  ■ low — listen for the pitch pattern';
+    pitchLabel.innerHTML = '<span style="color:#7b1fa2">■ high</span>  <span style="color:#aaa">■ low</span> — try to match the pitch too';
+  }
+}
+
+function shadUpdateScore() {
+  document.getElementById('shad-session-score').textContent = `${shadCorrect} / ${shadTotal}`;
+  document.getElementById('shad-pct').textContent = shadTotal
+    ? `(${Math.round(shadCorrect / shadTotal * 100)}%)` : '';
+}
+
+document.getElementById('shad-hear').addEventListener('click', () => {
+  if (shadCurrent) speak(shadCurrent.text, 0.85);
+});
+document.getElementById('shad-hear-slow').addEventListener('click', () => {
+  if (shadCurrent) speak(shadCurrent.text, 0.55);
+});
+document.getElementById('shad-sentence').addEventListener('click', () => {
+  if (shadCurrent && shadCurrent.sentence) speak(shadCurrent.sentence, 0.8);
+});
+
+document.getElementById('shad-speak').addEventListener('click', () => {
+  if (!shadRec || !shadCurrent) return;
+  const resultEl = document.getElementById('shad-result');
+  const btn = document.getElementById('shad-speak');
+  btn.textContent = '🔴 Listening…';
+  btn.disabled = true;
+  resultEl.innerHTML = '<span style="color:#888; font-size:0.88rem;">Listening… say the word now</span>';
+
+  shadRec.onresult = (ev) => {
+    const alternatives = Array.from(ev.results[0]).map(r => r.transcript);
+    const best = alternatives[0];
+
+    // Try all alternatives for best match (check hiragana AND kanji forms)
+    let bestLevel = 'miss';
+    let bestAlt = best;
+    for (const alt of alternatives) {
+      const lv = compareMatch(shadCurrent.text, alt, shadCurrent.kanji);
+      if (['exact','close','partial','miss'].indexOf(lv) <
+          ['exact','close','partial','miss'].indexOf(bestLevel)) {
+        bestLevel = lv; bestAlt = alt;
+      }
+    }
+
+    shadTotal++;
+    if (bestLevel === 'exact' || bestLevel === 'close') shadCorrect++;
+    shadUpdateScore();
+
+    const cfg = {
+      exact:   { cls: 'shad-exact',   icon: '✓', label: 'Great match — well done!',          color: '#2e7d32' },
+      close:   { cls: 'shad-close',   icon: '~', label: 'Close — keep practicing!',          color: '#e65100' },
+      partial: { cls: 'shad-partial', icon: '△', label: 'Partial match — try again',         color: '#bf360c' },
+      miss:    { cls: 'shad-miss',    icon: '✗', label: 'Not recognised — listen and retry', color: '#b71c1c' },
+    }[bestLevel];
+
+    const altLine = alternatives.length > 1
+      ? `<div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Other guesses: ${alternatives.slice(1,4).join(' / ')}</div>`
+      : '';
+
+    resultEl.innerHTML = `
+      <div class="shad-result-box ${cfg.cls}">
+        <div style="font-size:1rem; font-weight:600; color:${cfg.color}; margin-bottom:6px;">${cfg.icon} ${cfg.label}</div>
+        <div><span style="color:#888; font-size:0.82rem;">You said: </span>
+             <span style="font-size:1.2rem; font-weight:600;">${bestAlt}</span></div>
+        <div style="font-size:0.82rem; color:#888; margin-top:4px;">
+          Target: <strong>${shadCurrent.text}</strong> (${shadCurrent.reading})
+        </div>
+        ${altLine}
+      </div>`;
+  };
+
+  shadRec.onerror = (ev) => {
+    const msgs = {
+      'no-speech':         'No speech detected — make sure your mic is on and try again.',
+      'not-allowed':       'Microphone access denied. Allow mic in browser settings.',
+      'audio-capture':     'No microphone found.',
+      'network':           'Network error — speech recognition needs internet.',
+    };
+    resultEl.innerHTML = `<div class="shad-result-box shad-miss">⚠ ${msgs[ev.error] || 'Error: ' + ev.error}</div>`;
+  };
+
+  shadRec.onend = () => {
+    btn.textContent = '🎤 Speak';
+    btn.disabled = !SpeechRecognition;
+  };
+
+  try { shadRec.start(); } catch (e) { /* already running */ }
+});
+
+document.getElementById('shad-next').addEventListener('click', shadNewWord);
+
+document.getElementById('shad-reset').addEventListener('click', () => {
+  shadCorrect = 0; shadTotal = 0; shadUsed.clear();
+  shadUpdateScore();
+  shadNewWord();
+});
+
+document.getElementById('shad-filter').addEventListener('click', e => {
+  if (!e.target.classList.contains('shad-cat')) return;
+  document.querySelectorAll('.shad-cat').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  shadActiveCat = e.target.dataset.cat;
+  shadPool = shadActiveCat === 'all' ? [...shadAllWords] : shadAllWords.filter(w => w.cat === shadActiveCat);
+  shadUsed.clear();
+  shadNewWord();
+});
+
+document.querySelector('[data-panel="shadowing"]').addEventListener('click', () => {
+  if (!shadCurrent) shadNewWord();
+});
+</script>
+</body>
+</html>
