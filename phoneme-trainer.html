@@ -426,14 +426,20 @@ function _stopGeminiAudio() {
   if (_currentSource) { try { _currentSource.stop(); } catch(e) {} _currentSource = null; }
 }
 
-async function speakGemini(text) {
+// Single-mora playback uses 2.5 — 3.1 adds unwanted filler-word prosody to
+// isolated kana. Everything else (words, sentences, shadowing) uses default 3.1.
+const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
+
+async function speakGemini(text, opts) {
   _stopGeminiAudio();
   let data;
   try {
+    const body = { text };
+    if (opts && opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      body: JSON.stringify(body)
     });
     data = await res.json();
   } catch(e) {
@@ -474,8 +480,9 @@ function speakWebSpeech(text, rate) {
 }
 
 // ── Main entry point ── returns a Promise that resolves when audio ends
-function speak(text, rate) {
-  if (USE_GEMINI) return speakGemini(text);
+// opts: { model?: string } — optional model override forwarded to /api/tts
+function speak(text, rate, opts) {
+  if (USE_GEMINI) return speakGemini(text, opts);
   return speakWebSpeech(text, rate);
 }
 
@@ -632,7 +639,7 @@ function playChartSeq(items, btn) {
     }
     const { text, cell } = items[i++];
     flash(cell);
-    await speak(text, 0.9);
+    await speak(text, 0.9, { model: STABLE_MODEL });
     if (!chartSeqStop) setTimeout(next, 150);
   }
   next();
@@ -684,7 +691,7 @@ chartData.forEach(group => {
         cell.className = 'kana-cell' + (row.highlight ? ' ra-highlight' : '');
         if (group.katakana) cell.style.borderColor = '#90caf9';
         cell.innerHTML = `<span class="kana-char">${s[0]}</span><span class="kana-ro">${s[1]}</span>`;
-        cell.addEventListener('click', () => { speak(s[0]); flash(cell); });
+        cell.addEventListener('click', () => { speak(s[0], 0.9, { model: STABLE_MODEL }); flash(cell); });
         groupItems.push({ text: s[0], cell });
       }
       grid.appendChild(cell);

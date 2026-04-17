@@ -7,8 +7,14 @@
 // Returns: { audio: <base64 PCM string> }
 // Audio spec: 16-bit signed PCM, 24 kHz, mono
 
-const TTS_MODEL = 'gemini-3.1-flash-tts-preview';
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent`;
+const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
+// Models the client is allowed to request via the optional `model` field.
+// 2.5 is kept available for isolated mora playback (single kana) where 3.1's
+// conversational prosody adds unwanted emotion / filler-word intonation.
+const ALLOWED_MODELS = new Set([
+  'gemini-3.1-flash-tts-preview',
+  'gemini-2.5-flash-preview-tts',
+]);
 
 // Voice to use. Kore = calm female, good for Japanese.
 // Other options: Aoede, Charon, Fenrir, Puck — all support 70+ languages.
@@ -21,15 +27,18 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
   }
 
-  let text;
+  let text, model;
   try {
-    ({ text } = await context.request.json());
+    ({ text, model } = await context.request.json());
   } catch {
     return Response.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
   if (!text) return Response.json({ error: 'Missing text' }, { status: 400 });
 
-  const geminiRes = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+  const chosenModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent`;
+
+  const geminiRes = await fetch(`${endpoint}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
