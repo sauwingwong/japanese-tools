@@ -17,14 +17,26 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 #voice-select { padding: 4px 8px; border-radius: 4px; border: none; font-size: 0.82rem; max-width: 210px; }
 #voice-status { font-size: 0.75rem; opacity: 0.8; }
 
-nav { background: white; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; padding: 0 12px; }
+nav {
+  background: white; border-bottom: 2px solid #eee;
+  display: flex; overflow-x: auto; padding: 0 8px;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+nav::-webkit-scrollbar { display: none; }
 .tab {
-  padding: 11px 14px; border: none; background: none; cursor: pointer;
-  font-size: 0.85rem; color: #555; white-space: nowrap;
+  padding: 10px 15px; border: none; background: none; cursor: pointer;
+  font-size: 0.85rem; color: #666; white-space: nowrap; flex-shrink: 0;
   border-bottom: 3px solid transparent; transition: color 0.15s, border-color 0.15s;
 }
 .tab:hover { color: #c62828; }
 .tab.active { color: #c62828; border-bottom-color: #c62828; font-weight: 600; }
+.home-btn {
+  color: white; text-decoration: none; font-size: 0.8rem;
+  border: 1px solid rgba(255,255,255,0.45); border-radius: 16px;
+  padding: 4px 11px; opacity: 0.8; white-space: nowrap;
+  transition: opacity 0.15s, background 0.15s;
+}
+.home-btn:hover { opacity: 1; background: rgba(255,255,255,0.15); }
 
 main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 .panel { display: none; }
@@ -161,7 +173,10 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 <body>
 
 <header>
-  <h1>🎌 Japanese Phoneme Trainer</h1>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <a href="/" class="home-btn">← Home</a>
+    <h1>🎌 Japanese Phoneme Trainer</h1>
+  </div>
   <div id="voice-row">
     <label for="voice-select">Voice:</label>
     <select id="voice-select"></select>
