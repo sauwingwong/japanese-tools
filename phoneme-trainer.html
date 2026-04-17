@@ -168,6 +168,54 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 .btn { padding: 9px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.88rem; font-weight: 500; }
 .btn-red { background: #c62828; color: white; }
 .btn-red:hover { background: #b71c1c; }
+
+/* ── MOBILE (≤600px) ── */
+@media (max-width: 600px) {
+  header { padding: 10px 12px; gap: 6px; }
+  header h1 { font-size: 1.05rem; }
+  header > div:first-child { gap: 10px; }
+  #voice-row { font-size: 0.75rem; gap: 5px; }
+  #voice-select { max-width: 150px; font-size: 0.75rem; }
+  #voice-status { display: none; }
+  .home-btn { font-size: 0.72rem; padding: 3px 9px; }
+
+  nav { padding: 0 4px; }
+  .tab { padding: 9px 11px; font-size: 0.8rem; }
+
+  main { padding: 14px 10px; }
+  .tip { font-size: 0.82rem; padding: 9px 12px; }
+  .section-title { font-size: 1rem; }
+  .sub-title { font-size: 0.9rem; }
+
+  /* Sound chart — fit more cells per row */
+  .kana-grid { gap: 4px; }
+  .kana-cell { width: calc((100% - 24px) / 6); min-width: 48px; min-height: 50px; }
+  .kana-char { font-size: 1.25rem; }
+  .chart-group-hdr h3 { font-size: 0.78rem; }
+  .play-all-btn { font-size: 0.7rem; padding: 3px 9px; }
+
+  /* Pair buttons */
+  .pair-btn { padding: 11px 8px; }
+  .pw-word { font-size: 1.25rem; }
+  .pw-meaning { font-size: 0.7rem; }
+  .beat { width: 28px; height: 28px; font-size: 0.9rem; }
+
+  /* Ra-row cards */
+  .ra-cards { gap: 7px; }
+  .ra-card { padding: 12px 8px; min-width: 64px; }
+  .ra-kana { font-size: 1.7rem; }
+  .ra-ro { font-size: 0.72rem; }
+
+  /* Pitch cards — 2 per row */
+  .pitch-grid { gap: 8px; }
+  .pitch-card { width: calc(50% - 4px); padding: 10px 8px; }
+  .pc-word { font-size: 1rem; }
+
+  /* Practice */
+  #practice-area { padding: 22px 14px; }
+  #prac-play { width: 64px; height: 64px; font-size: 1.7rem; }
+  .opt-btn { font-size: 1.2rem; padding: 12px 6px; }
+}
 </style>
 </head>
 <body>
