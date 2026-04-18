@@ -413,6 +413,28 @@ function _getAudioCtx() {
   return _audioCtx;
 }
 
+// iOS Safari unlock: create + resume AudioContext on the very first user
+// gesture anywhere on the page, and play a 1-sample silent buffer. Without
+// this, AudioContext stays 'suspended' / 'interrupted' and later resume()
+// calls from inside async handlers lose their gesture token.
+let _ctxUnlocked = false;
+function _unlockOnGesture() {
+  if (_ctxUnlocked) return;
+  try {
+    const ctx = _getAudioCtx();
+    ctx.resume();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    _ctxUnlocked = true;
+  } catch(e) {}
+}
+['touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, _unlockOnGesture, { passive: true, capture: true });
+});
+
 function _stopGeminiAudio() {
   if (_currentSource) { try { _currentSource.stop(); } catch(e) {} _currentSource = null; }
   if (_currentAbort) { _currentAbort.abort(); _currentAbort = null; }
@@ -422,7 +444,8 @@ async function speakGemini(text) {
   _stopGeminiAudio();
   const ctx = _getAudioCtx();
   // iOS Safari: AudioContext starts suspended until resumed inside a user gesture.
-  if (ctx.state === 'suspended') { try { await ctx.resume(); } catch(e) {} }
+  // Always try to resume; iOS can flip to 'suspended' or 'interrupted' silently.
+  if (ctx.state !== 'running') { try { await ctx.resume(); } catch(e) {} }
 
   const ac = new AbortController();
   _currentAbort = ac;
