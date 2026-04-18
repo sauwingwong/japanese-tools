@@ -507,11 +507,10 @@ function _stopGeminiAudio() {
   if (_currentAbort) { _currentAbort.abort(); _currentAbort = null; }
 }
 
-// Sound Chart previously routed isolated kana to 2.5 to avoid 3.1's filler
-// prosody, but 2.5 currently returns no decodable audio through the proxy
-// (silent on iOS). Until that's resolved, fall back to default (3.1) for
-// everything — accept some extra prosody over silence.
-// const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
+// Sound Chart uses 2.5 for isolated-kana TTS. 3.1 either adds conversational
+// filler prosody or times out the Pages Function entirely (Cloudflare edge 502)
+// on single-mora input. 2.5 handles short input reliably.
+const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
 
 // ── On-screen debug toast (visible on mobile; replaces needing a Mac remote inspector) ──
 function _dbg(msg) {
@@ -759,7 +758,7 @@ function playChartSeq(items, btn) {
     }
     const { text, cell } = items[i++];
     flash(cell);
-    await speak(text, 0.9);
+    await speak(text, 0.9, { model: STABLE_MODEL });
     if (!chartSeqStop) setTimeout(next, 150);
   }
   next();
@@ -811,7 +810,7 @@ chartData.forEach(group => {
         cell.className = 'kana-cell' + (row.highlight ? ' ra-highlight' : '');
         if (group.katakana) cell.style.borderColor = '#90caf9';
         cell.innerHTML = `<span class="kana-char">${s[0]}</span><span class="kana-ro">${s[1]}</span>`;
-        cell.addEventListener('click', () => { speak(s[0], 0.9); flash(cell); });
+        cell.addEventListener('click', () => { speak(s[0], 0.9, { model: STABLE_MODEL }); flash(cell); });
         groupItems.push({ text: s[0], cell });
       }
       grid.appendChild(cell);
