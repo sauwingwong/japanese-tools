@@ -462,11 +462,16 @@ function loadVoices() {
 speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
 
-// When deployed, replace the voice picker with a Gemini TTS badge
+// When deployed, replace the voice picker with a hybrid-TTS badge.
+// Sound Chart uses the on-device voice (iOS Kyoko / Android Google 日本語);
+// everything else (Long Vowels, Double っ, R-Sounds, Pitch, Shadowing) uses Gemini.
 if (USE_GEMINI) {
   document.addEventListener('DOMContentLoaded', () => {
     const vr = document.getElementById('voice-row');
-    if (vr) vr.innerHTML = '<span style="font-size:0.82rem;opacity:0.9;">✨ Gemini TTS</span>';
+    if (vr) vr.innerHTML =
+      '<span style="font-size:0.82rem;opacity:0.9;" ' +
+      'title="Sound Chart plays with the on-device voice. Long Vowels, Double っ, R-Sounds, Pitch, and Shadowing use Gemini TTS.">' +
+      '✨ Gemini + 🔊 device</span>';
   });
 }
 
