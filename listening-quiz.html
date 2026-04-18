@@ -76,12 +76,15 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
   display: flex; align-items: center; justify-content: center; transition: background 0.12s, transform 0.12s;
 }
 #play-btn:hover { background: #0d1b6e; transform: scale(1.05); }
-#play-slow {
+#play-slow, #play-rich {
   background: none; border: 1px solid #9fa8da; color: #3949ab;
   padding: 4px 12px; border-radius: 14px; font-size: 0.78rem; cursor: pointer;
-  margin-bottom: 22px; transition: background 0.12s;
+  transition: background 0.12s;
 }
 #play-slow:hover { background: #e8eaf6; }
+#play-rich { border-color: #ffca28; color: #7a5200; background: #fffaf0; }
+#play-rich:hover { background: #fff3cd; }
+.play-row-sub { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
 
 #options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 420px; margin: 0 auto; }
 .opt {
@@ -188,7 +191,8 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
   #quiz-card { padding: 22px 16px; }
   #play-btn  { width: 64px; height: 64px; font-size: 1.8rem; }
-  #play-slow { margin-bottom: 16px; padding: 8px 16px; min-height: 36px; font-size: 0.82rem; }
+  #play-slow, #play-rich { padding: 8px 16px; min-height: 36px; font-size: 0.82rem; }
+  .play-row-sub { margin-bottom: 16px; }
 
   #options-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .opt { font-size: 1.1rem; padding: 12px 6px; min-height: 52px; }
@@ -253,11 +257,9 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
   <div id="quiz-card">
     <button id="play-btn" title="Play word (quick, 2.5)">▶</button>
-    <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-      <button id="play-slow">🐢 Play slower</button>
-      <button id="play-rich"
-              style="background:#fffaf0; border:1px solid #ffca28; border-radius:20px; padding:5px 14px; font-size:0.82rem; cursor:pointer; color:#7a5200;"
-              title="Rich voice (Gemini 3.1) — slower but more expressive">✨ Rich voice</button>
+    <div class="play-row-sub">
+      <button id="play-slow">🐢 Slower</button>
+      <button id="play-rich" title="Rich voice (Gemini 3.1) — slower but more expressive">✨ Rich</button>
     </div>
     <div id="options-grid"></div>
     <div id="speak-section" style="margin-top:14px; text-align:center;">
