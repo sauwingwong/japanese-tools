@@ -12,10 +12,21 @@
 <meta name="apple-mobile-web-app-title" content="Japanese">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4ff; color: #222; min-height: 100vh; }
+/* Native-app polish: kill iOS blue tap highlight, long-press callout, pull-to-refresh. */
+html, body { overscroll-behavior-y: contain; }
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f0f4ff; color: #222; min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+button, a, select, .opt, .cat-btn {
+  -webkit-tap-highlight-color: transparent;
+}
 
 header {
-  background: #1a237e; color: white; padding: 14px 20px;
+  background: #1a237e; color: white;
+  padding: 14px 20px; padding-top: calc(14px + env(safe-area-inset-top));
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
 }
 header h1 { font-size: 1.3rem; font-weight: 600; }
@@ -144,35 +155,59 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
 /* ── MOBILE (≤600px) ── */
 @media (max-width: 600px) {
-  header { padding: 10px 12px; gap: 6px; }
-  header h1 { font-size: 1.05rem; }
-  header > div:first-child { gap: 10px; }
-  #voice-row { font-size: 0.75rem; gap: 5px; }
-  #voice-select { max-width: 150px; font-size: 0.75rem; }
-  .home-btn { font-size: 0.72rem; padding: 3px 9px; }
+  header {
+    padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top));
+    gap: 6px; flex-wrap: nowrap;  /* keep header on one row */
+  }
+  header h1 { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header > div:first-child { gap: 10px; flex: 1; min-width: 0; }
+  /* Voice picker: keep compact, hide the 'Voice:' label — the select is self-explanatory */
+  #voice-row { font-size: 0.75rem; gap: 5px; flex-shrink: 0; }
+  #voice-row label { display: none; }
+  #voice-select { max-width: 118px; font-size: 0.75rem; }
+  .home-btn { font-size: 0.78rem; padding: 6px 12px; min-height: 34px;
+              display: inline-flex; align-items: center; }
 
-  .container { padding: 14px 10px; }
+  .container { padding: 14px 10px;
+                padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
   .filter-bar { gap: 6px; margin-bottom: 14px; }
-  .cat-btn { font-size: 0.76rem; padding: 4px 11px; }
+  .cat-btn { font-size: 0.78rem; padding: 7px 13px; min-height: 34px; }
 
-  #score-bar { padding: 11px 14px; }
+  /* Score bar: 2-column grid so streak/reset don't wrap awkwardly */
+  #score-bar {
+    padding: 11px 14px;
+    display: grid; grid-template-columns: 1fr auto; align-items: center;
+    column-gap: 10px; row-gap: 6px;
+  }
+  #score-bar > div:nth-child(1) { grid-column: 1; grid-row: 1; }
+  #score-bar > div:nth-child(2) { grid-column: 2; grid-row: 1; justify-self: end; }
+  #score-bar > #progress-bar   { grid-column: 1 / -1; grid-row: 2; margin-top: 2px; }
   .score-nums { font-size: 1rem; }
-  .streak { font-size: 0.82rem; }
+  .score-sub  { font-size: 0.78rem; }
+  .streak     { font-size: 0.82rem; }
 
   #quiz-card { padding: 22px 16px; }
-  #play-btn { width: 68px; height: 68px; font-size: 1.9rem; }
-  #play-slow { margin-bottom: 16px; }
+  #play-btn  { width: 64px; height: 64px; font-size: 1.8rem; }
+  #play-slow { margin-bottom: 16px; padding: 8px 16px; min-height: 36px; font-size: 0.82rem; }
 
   #options-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .opt { font-size: 1.1rem; padding: 11px 6px; }
+  .opt { font-size: 1.1rem; padding: 12px 6px; min-height: 52px; }
+  .opt .opt-meaning { font-size: 0.78rem; }
 
   #reveal { padding: 11px; }
   #reveal .rv-word { font-size: 1.15rem; }
   .rv-pm-box { width: 24px; height: 22px; font-size: 0.78rem; }
 
-  #next-btn { padding: 10px 22px; font-size: 0.9rem; }
+  #next-btn { padding: 12px 22px; font-size: 0.9rem; min-height: 44px; }
   #end-screen { padding: 24px 16px; }
   #end-screen h2 { font-size: 1.2rem; }
+
+  /* Tactile tap feedback on interactive elements */
+  .opt:active, .cat-btn:active, .home-btn:active,
+  #play-btn:active, #play-slow:active, #next-btn:active,
+  #reset-btn:active, #speak-try-btn:active, .btn:active {
+    transform: scale(0.96); transition: transform 80ms;
+  }
 }
 </style>
 </head>

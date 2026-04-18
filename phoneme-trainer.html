@@ -12,10 +12,21 @@
 <meta name="apple-mobile-web-app-title" content="Japanese">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f4; color: #222; }
+/* Native-app polish: kill iOS blue tap highlight, long-press callout, pull-to-refresh. */
+html, body { overscroll-behavior-y: contain; }
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f4f4f4; color: #222;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+button, a, select, .kana-cell, .pair-btn, .ra-card, .word-chip, .pitch-card, .opt-btn {
+  -webkit-tap-highlight-color: transparent;
+}
 
 header {
-  background: #c62828; color: white; padding: 14px 20px;
+  background: #c62828; color: white;
+  padding: 14px 20px; padding-top: calc(14px + env(safe-area-inset-top));
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
 }
 header h1 { font-size: 1.3rem; font-weight: 600; }
@@ -176,6 +187,10 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 .btn-red { background: #c62828; color: white; }
 .btn-red:hover { background: #b71c1c; }
 
+/* ── BOTTOM TAB BAR (mobile only) ── */
+.tabbar-mobile { display: none; }
+.more-sheet-backdrop { display: none; }
+
 /* ── MOBILE (≤600px) ── */
 @media (max-width: 600px) {
   header { padding: 10px 12px; gap: 6px; }
@@ -223,7 +238,80 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
   /* Practice */
   #practice-area { padding: 22px 14px; }
   #prac-play { width: 64px; height: 64px; font-size: 1.7rem; }
-  .opt-btn { font-size: 1.2rem; padding: 12px 6px; }
+  .opt-btn { font-size: 1.2rem; padding: 12px 6px; min-height: 48px; }
+
+  /* Replace horizontal scrolling top tabs with a fixed bottom tab bar. */
+  nav { display: none; }
+  .tabbar-mobile {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.94);
+    -webkit-backdrop-filter: saturate(180%) blur(18px);
+    backdrop-filter: saturate(180%) blur(18px);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 50;
+  }
+  .tabi {
+    border: 0; background: transparent; cursor: pointer;
+    font-size: 0.66rem; color: #8e8e93;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 2px 6px; min-height: 50px;
+    transition: color 120ms;
+    -webkit-user-select: none; user-select: none;
+  }
+  .tabi-ico { font-size: 1.3rem; line-height: 1; }
+  .tabi.active { color: #c62828; }
+  .tabi:active { transform: scale(0.92); transition: transform 80ms; }
+  /* Leave room below page content so bottom bar never covers it. */
+  main { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+
+  /* "More" bottom sheet */
+  .more-sheet-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.32); z-index: 100;
+    align-items: flex-end; justify-content: center;
+  }
+  .more-sheet-backdrop.open { display: flex; animation: msFade 150ms ease-out; }
+  .more-sheet {
+    width: 100%; background: white;
+    border-radius: 14px 14px 0 0;
+    padding: 6px 0 calc(14px + env(safe-area-inset-bottom));
+    animation: msSlide 220ms cubic-bezier(.2,.8,.2,1);
+  }
+  .more-sheet-handle {
+    width: 40px; height: 4px; background: #ccc; border-radius: 2px;
+    margin: 8px auto 10px;
+  }
+  .more-sheet h3 {
+    text-align: center; font-size: 0.72rem; color: #888;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 6px; font-weight: 600;
+  }
+  .tabi-row {
+    width: 100%; border: 0; background: transparent;
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px; font-size: 1rem; color: #222;
+    cursor: pointer; text-align: left; min-height: 52px;
+  }
+  .tabi-row:active { background: #f0f0f0; }
+  .tabi-row .tabi-ico { font-size: 1.4rem; line-height: 1; width: 28px; text-align: center; }
+  .tabi-row.active { color: #c62828; font-weight: 600; }
+  @keyframes msFade  { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes msSlide { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  /* Tap targets: min 44pt-ish for pill buttons */
+  .home-btn { min-height: 34px; padding: 6px 12px; font-size: 0.78rem;
+              display: inline-flex; align-items: center; }
+  .play-all-btn { min-height: 32px; padding: 5px 12px; font-size: 0.75rem; }
+
+  /* Active-state scale feedback for tactile taps */
+  .kana-cell:active, .pair-btn:active, .ra-card:active,
+  .word-chip:active, .pitch-card:active, .opt-btn:active,
+  .home-btn:active, .play-all-btn:active, #prac-play:active, .btn:active {
+    transform: scale(0.96); transition: transform 80ms;
+  }
 }
 </style>
 </head>
@@ -396,6 +484,24 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 </div>
 
 </main>
+
+<!-- ── MOBILE BOTTOM TAB BAR (hidden on desktop via CSS) ── -->
+<nav class="tabbar-mobile" aria-label="Section">
+  <button class="tabi active" data-panel="chart"><span class="tabi-ico">🔤</span>Chart</button>
+  <button class="tabi"        data-panel="pitch"><span class="tabi-ico">🎵</span>Pitch</button>
+  <button class="tabi"        data-panel="practice"><span class="tabi-ico">🎯</span>Practice</button>
+  <button class="tabi"        data-panel="shadowing"><span class="tabi-ico">🎤</span>Shadow</button>
+  <button class="tabi" id="more-tab-btn"><span class="tabi-ico">⋯</span>More</button>
+</nav>
+<div class="more-sheet-backdrop" id="more-sheet-backdrop" aria-hidden="true">
+  <div class="more-sheet" role="dialog" aria-label="More sections">
+    <div class="more-sheet-handle"></div>
+    <h3>More sections</h3>
+    <button class="tabi-row" data-panel="long-vowels"><span class="tabi-ico">🎶</span>Long Vowels</button>
+    <button class="tabi-row" data-panel="sokuon"><span class="tabi-ico">っ</span>Double Consonants</button>
+    <button class="tabi-row" data-panel="ra-row"><span class="tabi-ico">ら</span>R-Sounds</button>
+  </div>
+</div>
 
 <style>
 .shad-cat {
@@ -607,18 +713,57 @@ function flash(el, cls) {
 // ═══════════════════════════════════════════════════════════════════════
 // TAB SWITCHING
 // ═══════════════════════════════════════════════════════════════════════
+// Unified panel activation — called by desktop top tabs AND mobile bottom tabs AND the More sheet rows.
+const _primaryMobileTabs = ['chart', 'pitch', 'practice', 'shadowing'];
+function activatePanel(panelId) {
+  // Top desktop tabs
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panelId));
+  // Bottom mobile tab bar (skip the "More" button which has no data-panel)
+  document.querySelectorAll('.tabi[data-panel]').forEach(t => t.classList.toggle('active', t.dataset.panel === panelId));
+  // More-sheet rows
+  document.querySelectorAll('.tabi-row').forEach(t => t.classList.toggle('active', t.dataset.panel === panelId));
+  // Panels
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === panelId));
+  // Highlight the "More" bottom-bar button when the active panel lives inside the sheet.
+  const moreBtn = document.getElementById('more-tab-btn');
+  if (moreBtn) moreBtn.classList.toggle('active', !_primaryMobileTabs.includes(panelId));
+  // Stop any running chart playlist when leaving Sound Chart
+  if (panelId !== 'chart' && typeof stopChartSeq === 'function') stopChartSeq();
+  // Refresh the TTS badge to reflect the voice used by the new tab
+  if (typeof _updateTtsBadge === 'function') _updateTtsBadge();
+  // Per-panel init hooks (lazily create first question/word)
+  if (panelId === 'practice' && typeof pracCurrentKana !== 'undefined' && !pracCurrentKana
+      && typeof pracNewQuestion === 'function') pracNewQuestion();
+  if (panelId === 'shadowing' && typeof shadCurrent !== 'undefined' && !shadCurrent
+      && typeof shadNewWord === 'function') shadNewWord();
+}
+// Wire desktop top tabs
 document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.panel).classList.add('active');
-    // Stop any running chart playlist when leaving the Sound Chart tab
-    if (tab.dataset.panel !== 'chart' && typeof stopChartSeq === 'function') stopChartSeq();
-    // Refresh the TTS badge to reflect the voice used by the new tab.
-    if (typeof _updateTtsBadge === 'function') _updateTtsBadge();
-  });
+  tab.addEventListener('click', () => activatePanel(tab.dataset.panel));
 });
+// Wire mobile bottom bar + more sheet (set up after DOM is present)
+function _wireMobileNav() {
+  document.querySelectorAll('.tabi[data-panel], .tabi-row').forEach(el => {
+    el.addEventListener('click', () => {
+      activatePanel(el.dataset.panel);
+      const bd = document.getElementById('more-sheet-backdrop');
+      if (bd) bd.classList.remove('open');
+    });
+  });
+  const moreBtn = document.getElementById('more-tab-btn');
+  const bd = document.getElementById('more-sheet-backdrop');
+  if (moreBtn && bd) {
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      bd.classList.toggle('open');
+    });
+    bd.addEventListener('click', () => bd.classList.remove('open'));
+    // Prevent taps inside the sheet itself from closing
+    const sheet = bd.querySelector('.more-sheet');
+    if (sheet) sheet.addEventListener('click', (e) => e.stopPropagation());
+  }
+}
+_wireMobileNav();
 
 // ═══════════════════════════════════════════════════════════════════════
 // SOUND CHART DATA
@@ -1209,9 +1354,7 @@ document.getElementById('prac-reset-btn').addEventListener('click', () => {
 });
 
 // Start first question when Practice tab is opened
-document.querySelector('[data-panel="practice"]').addEventListener('click', () => {
-  if (!pracCurrentKana) pracNewQuestion();
-});
+// Lazy init for Practice panel is now handled centrally by activatePanel().
 
 // ═══════════════════════════════════════════════════════════════════════
 // SHADOWING DRILL
@@ -1542,9 +1685,7 @@ document.getElementById('shad-filter').addEventListener('click', e => {
   shadNewWord();
 });
 
-document.querySelector('[data-panel="shadowing"]').addEventListener('click', () => {
-  if (!shadCurrent) shadNewWord();
-});
+// Lazy init for Shadowing panel is now handled centrally by activatePanel().
 </script>
 <script>
 if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
