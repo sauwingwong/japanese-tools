@@ -300,12 +300,29 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
   });
 })();
 </script>
+<script type="module" onerror="window.__dbg && window.__dbg('MODULE-TAG-ERROR fired')">
+  window.__dbg && window.__dbg('2a: outer module tag ran (pre-import test)');
+</script>
 <script type="module">
-if (window.__dbg) window.__dbg('2: module script started');
-import { createSRS } from '/js/srs.js';
-if (window.__dbg) window.__dbg('3: imported srs.js');
-import { askGemini } from '/js/gemini.js';
-if (window.__dbg) window.__dbg('4: imported gemini.js');
+// Use dynamic import so we can catch load failures on iOS.
+window.__dbg && window.__dbg('2: main module script started');
+let createSRS, askGemini;
+try {
+  const mSrs = await import('/js/srs.js');
+  createSRS = mSrs.createSRS;
+  window.__dbg && window.__dbg('3: imported srs.js (createSRS=' + (typeof createSRS) + ')');
+} catch (e) {
+  window.__dbg && window.__dbg('IMPORT srs.js FAILED: ' + (e && (e.message || e.name) || 'unknown'));
+  throw e;
+}
+try {
+  const mGem = await import('/js/gemini.js');
+  askGemini = mGem.askGemini;
+  window.__dbg && window.__dbg('4: imported gemini.js (askGemini=' + (typeof askGemini) + ')');
+} catch (e) {
+  window.__dbg && window.__dbg('IMPORT gemini.js FAILED: ' + (e && (e.message || e.name) || 'unknown'));
+  throw e;
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // VOCABULARY DATA — loaded from /data/vocab-n5n4.json
