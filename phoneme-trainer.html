@@ -462,17 +462,21 @@ function loadVoices() {
 speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
 
-// When deployed, replace the voice picker with a hybrid-TTS badge.
-// Sound Chart uses the on-device voice (iOS Kyoko / Android Google 日本語);
-// everything else (Long Vowels, Double っ, R-Sounds, Pitch, Shadowing) uses Gemini.
+// When deployed, replace the voice picker with a dynamic TTS badge that
+// reflects the active tab: Sound Chart uses the on-device voice (iOS Kyoko /
+// Android Google 日本語); every other tab uses Gemini TTS.
+function _updateTtsBadge() {
+  const vr = document.getElementById('voice-row');
+  if (!vr) return;
+  const activeTab = document.querySelector('.tab.active');
+  const panel = activeTab && activeTab.dataset.panel;
+  const isChart = panel === 'chart';
+  vr.innerHTML = isChart
+    ? '<span style="font-size:0.82rem;opacity:0.9;" title="Sound Chart plays isolated kana with the built-in iOS / Android Japanese voice — instant and offline.">🔊 device voice</span>'
+    : '<span style="font-size:0.82rem;opacity:0.9;" title="This tab uses Gemini TTS for natural-sounding Japanese.">✨ Gemini TTS</span>';
+}
 if (USE_GEMINI) {
-  document.addEventListener('DOMContentLoaded', () => {
-    const vr = document.getElementById('voice-row');
-    if (vr) vr.innerHTML =
-      '<span style="font-size:0.82rem;opacity:0.9;" ' +
-      'title="Sound Chart plays with the on-device voice. Long Vowels, Double っ, R-Sounds, Pitch, and Shadowing use Gemini TTS.">' +
-      '✨ Gemini + 🔊 device</span>';
-  });
+  document.addEventListener('DOMContentLoaded', _updateTtsBadge);
 }
 
 // ── Gemini TTS ──
@@ -611,6 +615,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById(tab.dataset.panel).classList.add('active');
     // Stop any running chart playlist when leaving the Sound Chart tab
     if (tab.dataset.panel !== 'chart' && typeof stopChartSeq === 'function') stopChartSeq();
+    // Refresh the TTS badge to reflect the voice used by the new tab.
+    if (typeof _updateTtsBadge === 'function') _updateTtsBadge();
   });
 });
 
