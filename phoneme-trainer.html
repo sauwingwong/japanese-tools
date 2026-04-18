@@ -551,7 +551,14 @@ async function speakGemini(text, opts) {
       signal: ac.signal
     });
     _dbg(`/api/tts → ${res.status} ${res.headers.get('content-type')||''}`);
-    data = await res.json();
+    // Read as text first so we can log what we actually got if JSON.parse fails.
+    const raw = await res.text();
+    _dbg(`body len=${raw.length} head="${raw.slice(0,120)}"`);
+    try { data = JSON.parse(raw); }
+    catch (jerr) {
+      _dbg(`JSON parse ERR: ${jerr.message}`);
+      return speakWebSpeech(text, 0.9);
+    }
   } catch(e) {
     if (e.name === 'AbortError') { _dbg('aborted (superseded)'); return; }
     _dbg(`fetch ERR: ${e.message}`);
