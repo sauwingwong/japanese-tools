@@ -81,7 +81,7 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
   -webkit-backdrop-filter:blur(18px);
   border-top:1px solid rgba(0,0,0,0.08);
   padding-bottom: env(safe-area-inset-bottom);
-  grid-template-columns: repeat(4, 1fr); font-size:0.68rem;
+  grid-template-columns: repeat(7, 1fr); font-size:0.68rem;
 }
 @media(max-width:600px){ .tabbar-mobile { display:grid; } }
 .tabi { background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 0 6px; color:#666; text-decoration:none; font:inherit; font-size:0.65rem; cursor:pointer; }
@@ -127,9 +127,12 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 
 <nav class="tabbar-mobile">
   <a class="tabi" href="/"><span class="tabi-ico">🏠</span>Home</a>
+  <a class="tabi" href="/phoneme-trainer.html"><span class="tabi-ico">🗣️</span>Phoneme</a>
   <a class="tabi" href="/grammar.html"><span class="tabi-ico">🧠</span>Grammar</a>
   <a class="tabi active" href="/kanji.html"><span class="tabi-ico">🈁</span>Kanji</a>
-  <a class="tabi" href="/listening-quiz.html"><span class="tabi-ico">🎧</span>Listen</a>
+  <a class="tabi" href="/listening-quiz.html"><span class="tabi-ico">🎧</span>Vocab</a>
+  <a class="tabi" href="/dictation.html"><span class="tabi-ico">✍️</span>Dictation</a>
+  <a class="tabi" href="/phrases.html"><span class="tabi-ico">🗺️</span>Phrases</a>
 </nav>
 
 <!-- Inline askGemini — see listening-quiz.html for rationale. -->

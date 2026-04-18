@@ -40,7 +40,22 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 }
 .home-btn:hover { opacity: 1; background: rgba(255,255,255,0.15); }
 
-.container { max-width: 720px; margin: 0 auto; padding: 20px 14px; }
+.container { max-width: 720px; margin: 0 auto; padding: 20px 14px 100px; }
+
+/* Shared bottom tab bar — kept identical across pages so navigation is
+   consistent everywhere. Accent color comes from the page's theme-color. */
+.nav-tabs {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+  background: #fff; border-top: 1px solid #e0e0e0;
+  display: flex; justify-content: space-around;
+  padding: 7px 0; padding-bottom: calc(7px + env(safe-area-inset-bottom));
+}
+.tabi {
+  font-size: 0.66rem; text-decoration: none; color: #888; text-align: center;
+  padding: 2px 4px; flex: 1; min-width: 0;
+}
+.tabi-ico { display: block; font-size: 1.15rem; margin-bottom: 2px; }
+.tabi.active { color: #1a237e; font-weight: 600; }
 
 /* Category filter */
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
@@ -172,7 +187,7 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
               display: inline-flex; align-items: center; }
 
   .container { padding: 14px 10px;
-                padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+                padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .filter-bar { gap: 6px; margin-bottom: 14px; }
   .cat-btn { font-size: 0.78rem; padding: 7px 13px; min-height: 34px; }
 
@@ -282,6 +297,16 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
   </div>
 
 </div>
+
+<nav class="nav-tabs">
+  <a class="tabi" href="/"><span class="tabi-ico">🏠</span>Home</a>
+  <a class="tabi" href="/phoneme-trainer.html"><span class="tabi-ico">🗣️</span>Phoneme</a>
+  <a class="tabi" href="/grammar.html"><span class="tabi-ico">🧠</span>Grammar</a>
+  <a class="tabi" href="/kanji.html"><span class="tabi-ico">🈁</span>Kanji</a>
+  <a class="tabi active" href="/listening-quiz.html"><span class="tabi-ico">🎧</span>Vocab</a>
+  <a class="tabi" href="/dictation.html"><span class="tabi-ico">✍️</span>Dictation</a>
+  <a class="tabi" href="/phrases.html"><span class="tabi-ico">🗺️</span>Phrases</a>
+</nav>
 
 <!-- Gemini helper inlined as a classic script so no separate file needs to
      load, parse, and register globals. iOS Safari (installed PWA) has
