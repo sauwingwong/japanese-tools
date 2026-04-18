@@ -7,10 +7,12 @@
 // Returns: { audio: <base64 PCM string> }
 // Audio spec: 16-bit signed PCM, 24 kHz, mono
 
-const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
+// Default to 2.5 ("quick"): ~30% faster than 3.1 and naturally neutral, which
+// fits drill-style replay where the same word gets pressed many times. 3.1
+// ("rich") stays available via an explicit `model` on the request for when
+// the user wants a richer rendition (invoked by a sparkle button in the UI).
+const DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
 // Models the client is allowed to request via the optional `model` field.
-// 2.5 is kept available for isolated mora playback (single kana) where 3.1's
-// conversational prosody adds unwanted emotion / filler-word intonation.
 const ALLOWED_MODELS = new Set([
   'gemini-3.1-flash-tts-preview',
   'gemini-2.5-flash-preview-tts',

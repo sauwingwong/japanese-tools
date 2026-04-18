@@ -252,8 +252,13 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
   </div>
 
   <div id="quiz-card">
-    <button id="play-btn" title="Play word">▶</button>
-    <button id="play-slow">🐢 Play slower</button>
+    <button id="play-btn" title="Play word (quick, 2.5)">▶</button>
+    <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+      <button id="play-slow">🐢 Play slower</button>
+      <button id="play-rich"
+              style="background:#fffaf0; border:1px solid #ffca28; border-radius:20px; padding:5px 14px; font-size:0.82rem; cursor:pointer; color:#7a5200;"
+              title="Rich voice (Gemini 3.1) — slower but more expressive">✨ Rich voice</button>
+    </div>
     <div id="options-grid"></div>
     <div id="speak-section" style="margin-top:14px; text-align:center;">
       <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:6px;">
@@ -470,7 +475,8 @@ function _stopGeminiAudio() {
   if (_currentAbort) { _currentAbort.abort(); _currentAbort = null; }
 }
 
-async function speakGemini(text) {
+async function speakGemini(text, opts) {
+  opts = opts || {};
   _stopGeminiAudio();
   const ctx = _getAudioCtx();
   // iOS Safari: AudioContext starts suspended until resumed inside a user gesture.
@@ -481,10 +487,12 @@ async function speakGemini(text) {
   _currentAbort = ac;
   let data;
   try {
+    const body = { text };
+    if (opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
       signal: ac.signal
     });
     data = await res.json();
@@ -516,8 +524,8 @@ function speakWebSpeech(text, rate) {
   speechSynthesis.speak(utt);
 }
 
-function speak(text, rate) {
-  if (USE_GEMINI) { speakGemini(text); return; }
+function speak(text, rate, opts) {
+  if (USE_GEMINI) { speakGemini(text, opts); return; }
   speakWebSpeech(text, rate);
 }
 
@@ -809,6 +817,11 @@ document.getElementById('play-btn').addEventListener('click', () => {
 });
 document.getElementById('play-slow').addEventListener('click', () => {
   if (currentWord) speak(currentWord.word.h, 0.55);
+});
+// ✨ Rich voice — replay the current word with Gemini 3.1 for a richer tone.
+// Pass an explicit model; the server default is 2.5 for the other buttons.
+document.getElementById('play-rich').addEventListener('click', () => {
+  if (currentWord) speak(currentWord.word.h, 0.9, { model: 'gemini-3.1-flash-tts-preview' });
 });
 document.getElementById('play-sentence-btn').addEventListener('click', async () => {
   if (!currentWord) return;

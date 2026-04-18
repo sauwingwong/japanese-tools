@@ -146,6 +146,9 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
         <div class="ex-ja" id="ex-ja"></div>
         <div class="ex-en" id="ex-en"></div>
         <button id="ex-speak">🔊 Play</button>
+        <button id="ex-speak-rich"
+                title="Rich voice (Gemini 3.1) — slower but more expressive"
+                style="margin-left:6px; background:#fffaf0; border:1px solid #ffca28; border-radius:6px; padding:6px 12px; color:#7a5200; cursor:pointer;">✨ Rich</button>
       </div>
     </div>
 
@@ -281,12 +284,15 @@ async function getCoach(pattern, wrongPick) {
 
 // ── Speech (delegate to phoneme-trainer's pattern: use Gemini TTS via /api/tts) ──
 let _audioCtx = null;
-async function speak(text) {
+async function speak(text, opts) {
+  opts = opts || {};
   try {
+    const body = { text };
+    if (opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      body: JSON.stringify(body)
     });
     if (!res.ok) return;
     const { audio } = await res.json();
@@ -427,6 +433,7 @@ async function handleAnswer(pick, btn) {
     document.getElementById('ex-en').textContent = s.en;
     document.getElementById('example').classList.add('visible');
     document.getElementById('ex-speak').onclick = () => speak(s.ja);
+    document.getElementById('ex-speak-rich').onclick = () => speak(s.ja, { model: 'gemini-3.1-flash-tts-preview' });
   }
 
   document.getElementById('next-btn').style.display = 'inline-block';

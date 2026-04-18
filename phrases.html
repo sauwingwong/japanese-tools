@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tourist Phrases</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#e65100">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Japanese">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overscroll-behavior-y: contain; }
+body {
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #fff7ed; color: #222; min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+button, a, .cat-btn, .mode-btn { -webkit-tap-highlight-color: transparent; }
+
+header {
+  background: #e65100; color: white;
+  padding: 14px 20px; padding-top: calc(14px + env(safe-area-inset-top));
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+}
+header h1 { font-size: 1.2rem; font-weight: 700; }
+.home-btn {
+  color: white; text-decoration: none; font-size: 0.8rem;
+  border: 1px solid rgba(255,255,255,0.45); border-radius: 16px;
+  padding: 4px 11px; opacity: 0.85; white-space: nowrap;
+}
+.home-btn:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+
+.container { max-width: 720px; margin: 0 auto; padding: 16px 14px 120px; }
+
+.mode-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.mode-btn {
+  flex: 1; padding: 9px 10px; border-radius: 10px; border: 1.5px solid #ffb380;
+  background: #fff; color: #bf360c; font-size: 0.92rem; font-weight: 600; cursor: pointer;
+}
+.mode-btn.active { background: #e65100; color: #fff; border-color: #e65100; }
+
+.filter-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.cat-btn {
+  padding: 5px 12px; border-radius: 18px; border: 1.5px solid #ffb380;
+  background: #fff; font-size: 0.82rem; cursor: pointer; color: #bf360c;
+}
+.cat-btn.active { background: #e65100; color: #fff; border-color: #e65100; }
+
+/* Browse mode */
+.phrase-row {
+  background: #fff; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  display: flex; align-items: center; gap: 10px;
+  border-left: 4px solid #ffb380;
+}
+.phrase-row .body { flex: 1; min-width: 0; }
+.phrase-row .en { font-size: 0.82rem; color: #777; margin-bottom: 3px; }
+.phrase-row .ja { font-size: 1.18rem; font-weight: 600; color: #212121; line-height: 1.3; }
+.phrase-row .reading { font-size: 0.78rem; color: #999; margin-top: 2px; }
+.phrase-row .note { font-size: 0.75rem; color: #888; font-style: italic; margin-top: 4px; }
+.phrase-row .play-col { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.phrase-row button {
+  border: none; border-radius: 18px; padding: 5px 12px; font-size: 0.82rem;
+  cursor: pointer; min-width: 56px; font-weight: 600;
+}
+.phrase-row .btn-play { background: #e65100; color: #fff; }
+.phrase-row .btn-rich { background: #fffaf0; color: #7a5200; border: 1px solid #ffca28; }
+
+/* Practice mode */
+#practice-card {
+  background: #fff; border-radius: 14px; padding: 26px 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06); text-align: center;
+  min-height: 260px; display: flex; flex-direction: column; justify-content: center;
+}
+.prompt-en { font-size: 1.15rem; color: #555; margin-bottom: 14px; }
+.reveal-ja { font-size: 1.5rem; font-weight: 700; color: #212121; line-height: 1.3; margin-bottom: 4px; min-height: 1.3em; }
+.reveal-reading { font-size: 0.95rem; color: #888; margin-bottom: 14px; min-height: 1em; }
+.reveal-note { font-size: 0.82rem; color: #888; font-style: italic; margin-bottom: 14px; }
+.play-row { display: flex; gap: 8px; justify-content: center; margin: 14px 0 10px; flex-wrap: wrap; }
+.play-row button {
+  border-radius: 20px; padding: 8px 16px; font-size: 0.9rem; border: none; cursor: pointer; font-weight: 600;
+}
+.play-main { background: #e65100; color: #fff; min-width: 110px; }
+.play-rich { background: #fffaf0; color: #7a5200; border: 1px solid #ffca28 !important; }
+.grade-row { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+.grade-row button {
+  border-radius: 22px; padding: 10px 18px; font-size: 0.95rem; font-weight: 600; border: none; cursor: pointer;
+}
+.grade-good { background: #2e7d32; color: #fff; }
+.grade-hard { background: #fff; color: #e65100; border: 1.5px solid #e65100 !important; }
+
+.pstats { display: flex; justify-content: space-between; font-size: 0.82rem; color: #888; margin: 6px 2px 12px; }
+
+.nav-tabs {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+  background: #fff; border-top: 1px solid #f0d7b8;
+  display: flex; justify-content: space-around;
+  padding: 8px 0; padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+.tabi {
+  font-size: 0.68rem; text-decoration: none; color: #888; text-align: center; padding: 2px 6px;
+}
+.tabi-ico { display: block; font-size: 1.2rem; margin-bottom: 2px; }
+.tabi.active { color: #e65100; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗺️ Tourist Phrases</h1>
+  <a class="home-btn" href="/">← Home</a>
+</header>
+
+<div class="container">
+  <div class="mode-tabs">
+    <button class="mode-btn active" data-mode="browse">📖 Browse</button>
+    <button class="mode-btn" data-mode="practice">🎯 Practice</button>
+  </div>
+
+  <div class="filter-bar" id="filter-bar"></div>
+
+  <div id="browse-view"></div>
+
+  <div id="practice-view" style="display:none;">
+    <div class="pstats">
+      <span>Round <strong id="p-round">1</strong></span>
+      <span><span id="p-pool-size">0</span> in deck</span>
+    </div>
+    <div id="practice-card">
+      <div class="prompt-en" id="p-prompt">—</div>
+      <div class="reveal-ja" id="p-ja" style="visibility:hidden">—</div>
+      <div class="reveal-reading" id="p-reading" style="visibility:hidden">—</div>
+      <div class="reveal-note" id="p-note"></div>
+      <div class="play-row">
+        <button class="play-main" id="p-play">🔊 Play</button>
+        <button class="play-rich" id="p-rich" title="Rich voice (Gemini 3.1)">✨ Rich</button>
+        <button id="p-reveal" style="background:#fff; border:1.5px solid #bdbdbd !important; color:#555;">👁 Reveal</button>
+      </div>
+      <div class="grade-row" id="p-grade" style="display:none;">
+        <button class="grade-good" id="p-good">✓ Got it</button>
+        <button class="grade-hard" id="p-hard">↻ Need more</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="nav-tabs">
+  <a class="tabi" href="/"><span class="tabi-ico">🏠</span>Home</a>
+  <a class="tabi" href="/listening-quiz.html"><span class="tabi-ico">🎧</span>Vocab</a>
+  <a class="tabi" href="/grammar.html"><span class="tabi-ico">🧠</span>Grammar</a>
+  <a class="tabi active" href="/phrases.html"><span class="tabi-ico">🗺️</span>Phrases</a>
+</nav>
+
+<script type="module">
+import { createSRS } from '/js/srs.js';
+
+// ── Data ──
+const data = await fetch('/data/phrases-tourist.json').then(r => r.json());
+const ALL = data.phrases;
+
+const CATEGORIES = [
+  { id: 'all', label: 'All' },
+  { id: 'greetings', label: 'Greetings' },
+  { id: 'language', label: 'Language' },
+  { id: 'directions', label: 'Directions' },
+  { id: 'food', label: 'Food' },
+  { id: 'shopping', label: 'Shopping' },
+  { id: 'hotel', label: 'Hotel' },
+  { id: 'emergency', label: 'Emergency' },
+  { id: 'smalltalk', label: 'Small talk' },
+];
+
+let activeCat = localStorage.getItem('phrases-tourist-category') || 'all';
+let mode = localStorage.getItem('phrases-tourist-mode') || 'browse';
+const srs = createSRS('phrases-tourist');
+
+// ── Audio ──
+let _ctx = null;
+let _currentAbort = null;
+async function speak(text, opts) {
+  opts = opts || {};
+  try {
+    if (_currentAbort) _currentAbort.abort();
+    const ac = new AbortController();
+    _currentAbort = ac;
+    const body = { text };
+    if (opts.model) body.model = opts.model;
+    if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_ctx.state !== 'running') { try { await _ctx.resume(); } catch (e) {} }
+    const res = await fetch('/api/tts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: ac.signal,
+    });
+    if (!res.ok) return;
+    const { audio } = await res.json();
+    if (ac.signal.aborted) return;
+    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+    const pcm = new Int16Array(bytes.buffer);
+    const buf = _ctx.createBuffer(1, pcm.length, 24000);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+    const src = _ctx.createBufferSource();
+    src.buffer = buf; src.connect(_ctx.destination); src.start();
+  } catch (e) { /* abort or network — ignore */ }
+}
+
+// ── Category filter ──
+function renderFilter() {
+  const bar = document.getElementById('filter-bar');
+  bar.innerHTML = '';
+  CATEGORIES.forEach(c => {
+    const count = c.id === 'all' ? ALL.length : ALL.filter(p => p.cat === c.id).length;
+    if (count === 0 && c.id !== 'all') return;
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (activeCat === c.id ? ' active' : '');
+    btn.textContent = count === ALL.length || c.id === 'all' ? `${c.label} (${count})` : `${c.label} (${count})`;
+    btn.onclick = () => {
+      activeCat = c.id;
+      localStorage.setItem('phrases-tourist-category', activeCat);
+      renderFilter();
+      renderCurrentMode();
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function filteredPool() {
+  return activeCat === 'all' ? ALL : ALL.filter(p => p.cat === activeCat);
+}
+
+// ── Browse mode ──
+function renderBrowse() {
+  const view = document.getElementById('browse-view');
+  view.innerHTML = '';
+  const pool = filteredPool();
+  pool.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'phrase-row';
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.innerHTML =
+      `<div class="en">${escapeHtml(p.en)}</div>` +
+      `<div class="ja" lang="ja">${escapeHtml(p.ja)}</div>` +
+      `<div class="reading">${escapeHtml(p.reading)}</div>` +
+      (p.note ? `<div class="note">${escapeHtml(p.note)}</div>` : '');
+    row.appendChild(body);
+    const col = document.createElement('div');
+    col.className = 'play-col';
+    const play = document.createElement('button');
+    play.className = 'btn-play'; play.textContent = '▶';
+    play.title = 'Play (quick, 2.5)';
+    play.onclick = () => speak(p.ja);
+    const rich = document.createElement('button');
+    rich.className = 'btn-rich'; rich.textContent = '✨';
+    rich.title = 'Rich voice (3.1)';
+    rich.onclick = () => speak(p.ja, { model: 'gemini-3.1-flash-tts-preview' });
+    col.appendChild(play); col.appendChild(rich);
+    row.appendChild(col);
+    view.appendChild(row);
+  });
+  if (!pool.length) {
+    view.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">No phrases in this category.</div>';
+  }
+}
+
+// ── Practice mode ──
+let currentPhrase = null;
+let revealed = false;
+let roundN = parseInt(localStorage.getItem('phrases-tourist-round') || '1', 10);
+document.getElementById('p-round').textContent = roundN;
+
+function renderPractice() {
+  const pool = filteredPool();
+  document.getElementById('p-pool-size').textContent = pool.length;
+  if (!pool.length) {
+    document.getElementById('p-prompt').textContent = 'No phrases in this category.';
+    document.getElementById('p-ja').style.visibility = 'hidden';
+    document.getElementById('p-reading').style.visibility = 'hidden';
+    document.getElementById('p-grade').style.display = 'none';
+    currentPhrase = null;
+    return;
+  }
+  const id = srs.pickNext(pool.map(p => p.id), { avoidIds: currentPhrase ? [currentPhrase.id] : [] });
+  currentPhrase = pool.find(p => p.id === id) || pool[0];
+  revealed = false;
+  document.getElementById('p-prompt').textContent = currentPhrase.en;
+  document.getElementById('p-ja').textContent = currentPhrase.ja;
+  document.getElementById('p-ja').style.visibility = 'hidden';
+  document.getElementById('p-reading').textContent = currentPhrase.reading;
+  document.getElementById('p-reading').style.visibility = 'hidden';
+  document.getElementById('p-note').textContent = '';
+  document.getElementById('p-grade').style.display = 'none';
+  document.getElementById('p-reveal').style.display = '';
+}
+
+function reveal() {
+  if (!currentPhrase) return;
+  revealed = true;
+  document.getElementById('p-ja').style.visibility = 'visible';
+  document.getElementById('p-reading').style.visibility = 'visible';
+  document.getElementById('p-note').textContent = currentPhrase.note || '';
+  document.getElementById('p-grade').style.display = '';
+  document.getElementById('p-reveal').style.display = 'none';
+}
+
+document.getElementById('p-play').onclick = () => currentPhrase && speak(currentPhrase.ja);
+document.getElementById('p-rich').onclick = () => currentPhrase && speak(currentPhrase.ja, { model: 'gemini-3.1-flash-tts-preview' });
+document.getElementById('p-reveal').onclick = reveal;
+document.getElementById('p-good').onclick = () => {
+  if (!currentPhrase) return;
+  srs.recordResult(currentPhrase.id, true);
+  advanceRound();
+};
+document.getElementById('p-hard').onclick = () => {
+  if (!currentPhrase) return;
+  srs.recordResult(currentPhrase.id, false);
+  advanceRound();
+};
+function advanceRound() {
+  roundN++;
+  localStorage.setItem('phrases-tourist-round', String(roundN));
+  document.getElementById('p-round').textContent = roundN;
+  renderPractice();
+}
+
+// ── Mode switching ──
+function renderCurrentMode() {
+  if (mode === 'browse') {
+    document.getElementById('browse-view').style.display = '';
+    document.getElementById('practice-view').style.display = 'none';
+    renderBrowse();
+  } else {
+    document.getElementById('browse-view').style.display = 'none';
+    document.getElementById('practice-view').style.display = '';
+    if (!currentPhrase) renderPractice();
+    else {
+      // Keep current card but refresh pool size in case category changed.
+      document.getElementById('p-pool-size').textContent = filteredPool().length;
+    }
+  }
+}
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.onclick = () => {
+    mode = btn.dataset.mode;
+    localStorage.setItem('phrases-tourist-mode', mode);
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    renderCurrentMode();
+  };
+});
+// Set initial active tab
+document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── Init ──
+renderFilter();
+renderCurrentMode();
+
+// ── Service worker ──
+if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

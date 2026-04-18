@@ -15,7 +15,7 @@
 //   - /api/*: passthrough.
 //
 // Bump CACHE version to invalidate previously cached assets on deploy.
-const CACHE = 'japanese-v6';
+const CACHE = 'japanese-v7';
 const PRECACHE = [
   '/manifest.webmanifest',
   '/icon-192.png',
@@ -27,6 +27,7 @@ const PRECACHE = [
   '/data/grammar-n5n4.json',
   '/data/kanji-n5n4.json',
   '/data/vocab-n5n4.json',
+  '/data/phrases-tourist.json',
 ];
 
 self.addEventListener('install', e => {

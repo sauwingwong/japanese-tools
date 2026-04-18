@@ -114,6 +114,7 @@ textarea#input:focus { outline:none; border-color:#00695c; }
     <div class="play-controls">
       <button class="play-btn" id="play-btn">🔊 Play</button>
       <button class="play-btn secondary" id="slow-btn">🐢 Slow</button>
+      <button class="play-btn secondary" id="rich-btn" title="Rich voice (Gemini 3.1) — slower but more expressive" style="border-color:#ffca28; color:#7a5200;">✨ Rich</button>
     </div>
 
     <textarea id="input" placeholder="Type what you heard (hiragana / kana)…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
@@ -191,17 +192,20 @@ document.querySelectorAll('#filter-bar button').forEach(x => x.classList.toggle(
 // ── TTS ──
 let _ctx = null;
 let _lastAudio = null;
-async function speak(text, slow = false) {
+async function speak(text, slow = false, opts = {}) {
   try {
-    if (_lastAudio && !slow) {
+    // Client cache only applies to the default (2.5) model. Rich voice bypasses it.
+    if (_lastAudio && !slow && !opts.model) {
       // replay cached
       const src = _ctx.createBufferSource();
       src.buffer = _lastAudio; src.connect(_ctx.destination); src.playbackRate.value = slow ? 0.7 : 1;
       src.start(); return;
     }
+    const body = { text };
+    if (opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text })
+      body: JSON.stringify(body)
     });
     if (!res.ok) return;
     const { audio } = await res.json();
@@ -212,7 +216,9 @@ async function speak(text, slow = false) {
     const buf = _ctx.createBuffer(1, pcm.length, 24000);
     const ch = buf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
-    _lastAudio = buf;
+    // Only overwrite the replay cache for default-model playback — we want a
+    // second press of 🔊 Play to use the 2.5 rendition, not the 3.1 one.
+    if (!opts.model) _lastAudio = buf;
     const src = _ctx.createBufferSource();
     src.buffer = buf; src.connect(_ctx.destination);
     src.playbackRate.value = slow ? 0.7 : 1;
@@ -225,6 +231,9 @@ document.getElementById('play-btn').addEventListener('click', () => {
 });
 document.getElementById('slow-btn').addEventListener('click', () => {
   if (current) speak(current.ja, true);
+});
+document.getElementById('rich-btn').addEventListener('click', () => {
+  if (current) speak(current.ja, false, { model: 'gemini-3.1-flash-tts-preview' });
 });
 
 // ── Gemini: generate a sentence ──

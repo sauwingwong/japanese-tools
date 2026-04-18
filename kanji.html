@@ -226,11 +226,14 @@ async function getCoach(k, wrongPick) {
 
 // ── TTS ──
 let _ctx = null;
-async function speak(text) {
+async function speak(text, opts) {
+  opts = opts || {};
   try {
+    const body = { text };
+    if (opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text })
+      body: JSON.stringify(body)
     });
     if (!res.ok) return;
     const { audio } = await res.json();
@@ -306,8 +309,11 @@ async function renderKanjiToReading(area, withSentence) {
       area.appendChild(en);
       const pb = document.createElement('div');
       pb.style.textAlign = 'center';
-      pb.innerHTML = '<button class="play-btn">🔊 Play sentence</button>';
-      pb.querySelector('button').onclick = () => speak(ex.ja);
+      pb.innerHTML = '<button class="play-btn">🔊 Play sentence</button>' +
+        ' <button class="play-btn" style="margin-left:6px; background:#fffaf0; color:#7a5200; border:1px solid #ffca28;" title="Rich voice (Gemini 3.1)">✨ Rich</button>';
+      const [playBtn, richBtn] = pb.querySelectorAll('button');
+      playBtn.onclick = () => speak(ex.ja);
+      richBtn.onclick = () => speak(ex.ja, { model: 'gemini-3.1-flash-tts-preview' });
       area.appendChild(pb);
 
       current._contextReading = ex.reading; // store for grading
