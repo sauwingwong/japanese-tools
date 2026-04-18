@@ -321,6 +321,19 @@ try {
   window.__dbg && window.__dbg('4: imported gemini.js (askGemini=' + (typeof askGemini) + ')');
 } catch (e) {
   window.__dbg && window.__dbg('IMPORT gemini.js FAILED: ' + (e && (e.message || e.name) || 'unknown'));
+  // Fetch the file raw to see what iOS is actually getting.
+  try {
+    const probe = await fetch('/js/gemini.js', { cache: 'no-cache' });
+    const txt = await probe.text();
+    window.__dbg && window.__dbg(
+      '4-probe: status=' + probe.status +
+      ' ct=' + (probe.headers.get('content-type') || '?') +
+      ' len=' + txt.length +
+      ' first80=' + txt.slice(0, 80).replace(/\n/g, '\\n')
+    );
+  } catch (pe) {
+    window.__dbg && window.__dbg('4-probe FETCH FAILED: ' + (pe.message || pe));
+  }
   throw e;
 }
 
