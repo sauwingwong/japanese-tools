@@ -736,15 +736,49 @@ document.getElementById('filter-bar').addEventListener('click', e => {
 });
 
 // ── Bootstrap: load vocab JSON, then start. ──
+function showBootError(msg) {
+  const fb = document.getElementById('feedback-text');
+  if (fb) {
+    fb.innerHTML = `<div style="color:#c62828; font-size:0.85rem; padding:10px; background:#ffebee; border-radius:6px; text-align:left; word-break:break-all;">⚠ ${msg}</div>`;
+  }
+  // Also surface above the card so it's impossible to miss on mobile.
+  const card = document.getElementById('quiz-card');
+  if (card && !document.getElementById('boot-err-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'boot-err-banner';
+    banner.style.cssText = 'background:#fff3e0;border:1px solid #ffb74d;color:#e65100;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-size:0.85rem;line-height:1.4;';
+    banner.textContent = '⚠ Vocab failed to load: ' + msg;
+    card.parentNode.insertBefore(banner, card);
+  }
+}
+
 async function bootstrap() {
+  let res;
   try {
-    const res = await fetch('/data/vocab-n5n4.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    VOCAB = await res.json();
+    res = await fetch('/data/vocab-n5n4.json', { cache: 'no-cache' });
   } catch (e) {
-    document.getElementById('feedback-text').textContent =
-      '⚠ Failed to load vocabulary. Check your connection and reload.';
-    console.error('vocab load failed:', e);
+    showBootError('network error — ' + (e.message || 'fetch rejected'));
+    return;
+  }
+  if (!res.ok) {
+    showBootError('HTTP ' + res.status + ' ' + res.statusText);
+    return;
+  }
+  const ct = res.headers.get('content-type') || '';
+  const body = await res.text();
+  if (!ct.includes('json') && !body.trim().startsWith('[')) {
+    // Cloudflare Access may have returned a login page instead of JSON.
+    showBootError('Got ' + ct + ' instead of JSON (first 80 chars: ' + body.slice(0,80) + ')');
+    return;
+  }
+  try {
+    VOCAB = JSON.parse(body);
+  } catch (e) {
+    showBootError('JSON parse failed — ' + e.message);
+    return;
+  }
+  if (!Array.isArray(VOCAB) || VOCAB.length === 0) {
+    showBootError('Vocab array was empty');
     return;
   }
   // Restore level toggle active state from localStorage.
