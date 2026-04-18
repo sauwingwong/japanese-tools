@@ -507,9 +507,11 @@ function _stopGeminiAudio() {
   if (_currentAbort) { _currentAbort.abort(); _currentAbort = null; }
 }
 
-// Single-mora playback uses 2.5 — 3.1 adds unwanted filler-word prosody to
-// isolated kana. Everything else (words, sentences, shadowing) uses default 3.1.
-const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
+// Sound Chart previously routed isolated kana to 2.5 to avoid 3.1's filler
+// prosody, but 2.5 currently returns no decodable audio through the proxy
+// (silent on iOS). Until that's resolved, fall back to default (3.1) for
+// everything — accept some extra prosody over silence.
+// const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
 
 async function speakGemini(text, opts) {
   _stopGeminiAudio();
@@ -729,7 +731,7 @@ function playChartSeq(items, btn) {
     }
     const { text, cell } = items[i++];
     flash(cell);
-    await speak(text, 0.9, { model: STABLE_MODEL });
+    await speak(text, 0.9);
     if (!chartSeqStop) setTimeout(next, 150);
   }
   next();
@@ -781,7 +783,7 @@ chartData.forEach(group => {
         cell.className = 'kana-cell' + (row.highlight ? ' ra-highlight' : '');
         if (group.katakana) cell.style.borderColor = '#90caf9';
         cell.innerHTML = `<span class="kana-char">${s[0]}</span><span class="kana-ro">${s[1]}</span>`;
-        cell.addEventListener('click', () => { speak(s[0], 0.9, { model: STABLE_MODEL }); flash(cell); });
+        cell.addEventListener('click', () => { speak(s[0], 0.9); flash(cell); });
         groupItems.push({ text: s[0], cell });
       }
       grid.appendChild(cell);
