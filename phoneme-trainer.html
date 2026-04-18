@@ -495,6 +495,14 @@ function _unlockOnGesture() {
     src.buffer = buf;
     src.connect(ctx.destination);
     src.start(0);
+    // Also prime Web Speech — iOS needs an in-gesture speak() to unlock it.
+    if ('speechSynthesis' in window) {
+      try {
+        const u = new SpeechSynthesisUtterance('');
+        u.volume = 0;
+        speechSynthesis.speak(u);
+      } catch(e) {}
+    }
     _ctxUnlocked = true;
   } catch(e) {}
 }
@@ -512,30 +520,11 @@ function _stopGeminiAudio() {
 // on single-mora input. 2.5 handles short input reliably.
 const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
 
-// ── On-screen debug toast (visible on mobile; replaces needing a Mac remote inspector) ──
-function _dbg(msg) {
-  let el = document.getElementById('_dbg');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = '_dbg';
-    el.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;z-index:9999;' +
-      'background:rgba(0,0,0,0.82);color:#fff;font:11px/1.35 monospace;' +
-      'padding:6px 8px;border-radius:6px;max-height:40vh;overflow:auto;white-space:pre-wrap;';
-    el.addEventListener('click', () => el.remove());
-    document.body.appendChild(el);
-  }
-  const t = new Date().toISOString().slice(14,19);
-  el.textContent = `[${t}] ${msg}\n` + el.textContent;
-}
-
 async function speakGemini(text, opts) {
   _stopGeminiAudio();
   const ctx = _getAudioCtx();
-  _dbg(`tap "${text}" ctx=${ctx.state}`);
-  if (ctx.state !== 'running') {
-    try { await ctx.resume(); _dbg(`resumed → ${ctx.state}`); }
-    catch(e) { _dbg(`resume ERR: ${e.message}`); }
-  }
+  // iOS Safari: AudioContext starts suspended / can flip to interrupted.
+  if (ctx.state !== 'running') { try { await ctx.resume(); } catch(e) {} }
 
   const ac = new AbortController();
   _currentAbort = ac;
@@ -549,26 +538,17 @@ async function speakGemini(text, opts) {
       body: JSON.stringify(body),
       signal: ac.signal
     });
-    _dbg(`/api/tts → ${res.status} ${res.headers.get('content-type')||''}`);
-    // Read as text first so we can log what we actually got if JSON.parse fails.
     const raw = await res.text();
-    _dbg(`body len=${raw.length} head="${raw.slice(0,120)}"`);
     try { data = JSON.parse(raw); }
-    catch (jerr) {
-      _dbg(`JSON parse ERR: ${jerr.message}`);
-      return speakWebSpeech(text, 0.9);
-    }
+    catch { return speakWebSpeech(text, 0.9); }  // proxy returned HTML error page
+    if (!res.ok) return speakWebSpeech(text, 0.9);
   } catch(e) {
-    if (e.name === 'AbortError') { _dbg('aborted (superseded)'); return; }
-    _dbg(`fetch ERR: ${e.message}`);
+    if (e.name === 'AbortError') return; // superseded by a newer speak() call
     return speakWebSpeech(text, 0.9);
   }
-  if (ac.signal.aborted) { _dbg('aborted post-fetch'); return; }
-  if (!data.audio) {
-    _dbg(`no audio in response: ${JSON.stringify(data).slice(0,160)}`);
-    return speakWebSpeech(text, 0.9);
-  }
-  _dbg(`audio b64 len=${data.audio.length}`);
+  if (ac.signal.aborted) return;
+  if (!data.audio) return speakWebSpeech(text, 0.9);
+
   const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
   const buf = ctx.createBuffer(1, bytes.length / 2, 24000);
   const ch = buf.getChannelData(0);
@@ -578,9 +558,8 @@ async function speakGemini(text, opts) {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
-    src.onended = () => { _dbg('onended'); resolve(); };
-    try { src.start(); _dbg(`start OK ctx=${ctx.state}`); }
-    catch(e) { _dbg(`start ERR: ${e.message}`); resolve(); }
+    src.onended = resolve;
+    try { src.start(); } catch(e) { resolve(); }
     _currentSource = src;
   });
 }
@@ -599,8 +578,13 @@ function speakWebSpeech(text, rate) {
 }
 
 // ── Main entry point ── returns a Promise that resolves when audio ends
-// opts: { model?: string } — optional model override forwarded to /api/tts
+// opts: { model?: string, local?: boolean }
+//   - local: true forces the on-device Web Speech voice (instant, offline).
+//     Used for Sound Chart isolated kana — Gemini TTS is unreliable on
+//     single-mora input (intermittent Cloudflare 502s) and the quality
+//     difference is negligible for a single sound.
 function speak(text, rate, opts) {
+  if (opts && opts.local) return speakWebSpeech(text, rate || 0.9);
   if (USE_GEMINI) return speakGemini(text, opts);
   return speakWebSpeech(text, rate);
 }
@@ -758,7 +742,7 @@ function playChartSeq(items, btn) {
     }
     const { text, cell } = items[i++];
     flash(cell);
-    await speak(text, 0.9, { model: STABLE_MODEL });
+    await speak(text, 0.9, { local: true });
     if (!chartSeqStop) setTimeout(next, 150);
   }
   next();
@@ -810,7 +794,7 @@ chartData.forEach(group => {
         cell.className = 'kana-cell' + (row.highlight ? ' ra-highlight' : '');
         if (group.katakana) cell.style.borderColor = '#90caf9';
         cell.innerHTML = `<span class="kana-char">${s[0]}</span><span class="kana-ro">${s[1]}</span>`;
-        cell.addEventListener('click', () => { speak(s[0], 0.9, { model: STABLE_MODEL }); flash(cell); });
+        cell.addEventListener('click', () => { speak(s[0], 0.9, { local: true }); flash(cell); });
         groupItems.push({ text: s[0], cell });
       }
       grid.appendChild(cell);
