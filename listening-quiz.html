@@ -300,11 +300,77 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
   });
 })();
 </script>
-<!-- Load gemini helpers as classic script so iOS Safari parses it reliably.
-     It attaches window.askGemini / window.clearGeminiCache. -->
-<script src="/js/gemini.js"
-        onload="window.__dbg && window.__dbg('4: loaded gemini.js classic (askGemini=' + (typeof window.askGemini) + ')')"
-        onerror="window.__dbg && window.__dbg('LOAD gemini.js FAILED (classic script)')"></script>
+<!-- Gemini helper inlined as a classic script so no separate file needs to
+     load, parse, and register globals. iOS Safari (installed PWA) has
+     intermittently failed on both `<script type="module">` and classic
+     `<script src="/js/gemini.js">` for this file — inlining sidesteps the
+     entire fetch/parse path and the service-worker cache. -->
+<script>
+(function (root) {
+  var CACHE_PREFIX = 'gemini-cache/';
+  var DEFAULT_TTL_DAYS = 7;
+  function cacheGet(key) {
+    try {
+      var raw = localStorage.getItem(CACHE_PREFIX + key);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (typeof parsed.exp === 'number' && parsed.exp < Date.now()) {
+        localStorage.removeItem(CACHE_PREFIX + key);
+        return null;
+      }
+      return parsed.value;
+    } catch (_e) { return null; }
+  }
+  function cacheSet(key, value, ttlDays) {
+    try {
+      var exp = Date.now() + ttlDays * 86400000;
+      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ value: value, exp: exp }));
+    } catch (_e) {}
+  }
+  function askGemini(prompt, opts) {
+    opts = opts || {};
+    var ttlDays = typeof opts.ttlDays === 'number' ? opts.ttlDays : DEFAULT_TTL_DAYS;
+    if (opts.cacheKey && opts.bypassCache !== true) {
+      var hit = cacheGet(opts.cacheKey);
+      if (hit !== null) return Promise.resolve(hit);
+    }
+    var body = { prompt: prompt };
+    if (opts.schema) body.schema = opts.schema;
+    if (typeof opts.temperature === 'number') body.temperature = opts.temperature;
+    if (opts.model) body.model = opts.model;
+    return fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: opts.signal
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.json().then(
+          function (j) { throw new Error('Gemini request failed: ' + (j && j.error || res.status)); },
+          function () { throw new Error('Gemini request failed: HTTP ' + res.status); }
+        );
+      }
+      return res.json();
+    }).then(function (data) {
+      if (opts.cacheKey) cacheSet(opts.cacheKey, data.text, ttlDays);
+      return data.text;
+    });
+  }
+  root.askGemini = askGemini;
+  root.clearGeminiCache = function (k) { try { localStorage.removeItem(CACHE_PREFIX + k); } catch (_e) {} };
+  root.clearAllGeminiCache = function () {
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(CACHE_PREFIX) === 0) keys.push(k);
+      }
+      for (var j = 0; j < keys.length; j++) localStorage.removeItem(keys[j]);
+    } catch (_e) {}
+  };
+  if (root.__dbg) root.__dbg('4: inlined askGemini ready (askGemini=' + (typeof root.askGemini) + ')');
+})(window);
+</script>
 <script type="module">
 window.__dbg && window.__dbg('2: main module script started');
 let createSRS;
