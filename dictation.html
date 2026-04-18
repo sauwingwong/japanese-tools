@@ -147,8 +147,21 @@ textarea#input:focus { outline:none; border-color:#00695c; }
   <a class="tabi active" href="/dictation.html"><span class="tabi-ico">✍️</span>Dictation</a>
 </nav>
 
+<!-- Inline askGemini — see listening-quiz.html for rationale. -->
+<script>
+(function(root){
+  var P='gemini-cache/',D=7;
+  function g(k){try{var r=localStorage.getItem(P+k);if(!r)return null;var p=JSON.parse(r);if(typeof p.exp==='number'&&p.exp<Date.now()){localStorage.removeItem(P+k);return null;}return p.value;}catch(_e){return null;}}
+  function s(k,v,t){try{localStorage.setItem(P+k,JSON.stringify({value:v,exp:Date.now()+t*86400000}));}catch(_e){}}
+  root.askGemini=function(prompt,opts){opts=opts||{};var t=typeof opts.ttlDays==='number'?opts.ttlDays:D;if(opts.cacheKey&&opts.bypassCache!==true){var h=g(opts.cacheKey);if(h!==null)return Promise.resolve(h);}
+    var b={prompt:prompt};if(opts.schema)b.schema=opts.schema;if(typeof opts.temperature==='number')b.temperature=opts.temperature;if(opts.model)b.model=opts.model;
+    return fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b),signal:opts.signal}).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error('Gemini failed: '+(j&&j.error||r.status));},function(){throw new Error('Gemini failed: HTTP '+r.status);});return r.json();}).then(function(d){if(opts.cacheKey)s(opts.cacheKey,d.text,t);return d.text;});};
+  root.clearGeminiCache=function(k){try{localStorage.removeItem(P+k);}catch(_e){}};
+  root.clearAllGeminiCache=function(){try{var ks=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(P)===0)ks.push(k);}for(var j=0;j<ks.length;j++)localStorage.removeItem(ks[j]);}catch(_e){}};
+})(window);
+</script>
 <script type="module">
-import { askGemini } from '/js/gemini.js';
+const askGemini = window.askGemini;
 
 const TOPICS = ['daily life', 'food', 'school', 'travel', 'work', 'shopping', 'weather', 'family', 'weekend plans', 'transport'];
 

@@ -20,6 +20,28 @@ const ALLOWED_MODELS = new Set([
 // Other options: Aoede, Charon, Fenrir, Puck — all support 70+ languages.
 const VOICE = 'Kore';
 
+// Pedagogical style prompt prepended to the TTS input. Gemini 3.1 TTS is a
+// conversational model that otherwise adds varying prosody / emotion / filler
+// intonation on each generation — unhelpful when the same word should sound
+// the same every replay. The model extracts this hint and does NOT read it
+// aloud (Gemini TTS behaviour: "Say ...: <text>" is a recognised style frame).
+const STYLE_PREFIX =
+  'Say the following Japanese clearly and calmly, at a steady learning pace, ' +
+  'with neutral pedagogical intonation, no emotion, no filler sounds: ';
+
+// Tone-fixing cache. Same (text, model, voice, style) → same audio bytes on
+// every replay, which eliminates the "different tone every press" problem.
+// We reuse Cloudflare's edge cache (caches.default) keyed by a synthetic GET
+// URL. TTL long: pronunciations don't churn. Cache miss regenerates fresh.
+const CACHE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+async function sha1Hex(str) {
+  const buf = new TextEncoder().encode(str);
+  const hash = await crypto.subtle.digest('SHA-1', buf);
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function onRequestPost(context) {
   // ── CORS preflight (handled by onRequestOptions below) ──
   const apiKey = context.env.GEMINI_API_KEY;
@@ -41,7 +63,32 @@ export async function onRequestPost(context) {
   // Both 2.5 and 3.1 TTS models hang (→ Cloudflare edge 502) on very short input
   // like a single kana. Pad to give the model enough context to synthesise quickly.
   // The trailing period adds ~a comma-length pause without altering the kana sound.
-  const ttsText = text.trim().length <= 2 ? `${text}。` : text;
+  const rawText = text.trim().length <= 2 ? `${text}。` : text;
+  // Prepend the pedagogical style instruction. 2.5 TTS is less conversational
+  // and doesn't need it — applying only on 3.1 keeps 2.5 output unchanged for
+  // single-kana playback paths that deliberately pick 2.5 for neutrality.
+  const ttsText = chosenModel === 'gemini-3.1-flash-tts-preview'
+    ? STYLE_PREFIX + rawText
+    : rawText;
+
+  // ── Edge cache lookup ── Hash the final payload so a change to the style
+  // prefix or voice invalidates old entries automatically.
+  const cacheKeyStr = `${chosenModel}|${VOICE}|${ttsText}`;
+  const cacheKeyHash = await sha1Hex(cacheKeyStr);
+  const cacheReq = new Request(
+    `https://tts-cache.internal/${chosenModel}/${VOICE}/${cacheKeyHash}`,
+    { method: 'GET' }
+  );
+  const edgeCache = caches.default;
+  const cached = await edgeCache.match(cacheReq);
+  if (cached) {
+    return new Response(cached.body, {
+      headers: {
+        ...Object.fromEntries(cached.headers),
+        'X-TTS-Cache': 'hit',
+      },
+    });
+  }
 
   // Abort the upstream call if Gemini hangs, so we return control to the client
   // with a clean JSON error instead of getting killed by Cloudflare's edge timeout.
@@ -87,9 +134,20 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'No audio in Gemini response', raw: data }, { status: 502 });
   }
 
-  return Response.json({ audio: audioB64 }, {
-    headers: { 'Access-Control-Allow-Origin': '*' }
+  const resp = Response.json({ audio: audioB64 }, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      // Allow Cloudflare's edge cache to store this response for 30 days.
+      // Same-text replays across all users hit this cache and return
+      // identical audio bytes — which is exactly the "fix the tone" behaviour.
+      'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}, immutable`,
+      'X-TTS-Cache': 'miss',
+    }
   });
+  // Fire-and-forget put into edge cache. Clone because Response bodies are
+  // one-shot streams.
+  context.waitUntil(edgeCache.put(cacheReq, resp.clone()));
+  return resp;
 }
 
 // Handle CORS preflight
