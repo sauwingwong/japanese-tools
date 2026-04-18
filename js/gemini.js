@@ -1,96 +1,101 @@
 // Client helper for /api/gemini.
-// - Caches results in localStorage keyed by `cacheKey` with a TTL (default 7d)
+// - Caches results in localStorage keyed by cacheKey with a TTL (default 7d)
 //   so re-drilling the same content is free.
-// - `schema` forces structured JSON output (Gemini responseSchema).
+// - schema forces structured JSON output (Gemini responseSchema).
 // - Abortable via opts.signal.
 //
-// Usage:
-//   const data = await askGemini(prompt, {
-//     schema: { type: 'object', properties: {...}, required: [...] },
-//     cacheKey: 'grammar/naranai',
-//     ttlDays: 7,
-//   });
+// Dual-mode: works as an ES module (export) AND as a classic script that
+// attaches window.askGemini / window.clearGeminiCache / window.clearAllGeminiCache.
+// Some older iOS Safari versions fail to load this file as a module; the
+// classic-script path is the reliable fallback.
 
-const CACHE_PREFIX = 'gemini-cache/';
-const DEFAULT_TTL_DAYS = 7;
+(function (root) {
+  var CACHE_PREFIX = 'gemini-cache/';
+  var DEFAULT_TTL_DAYS = 7;
 
-function cacheGet(key) {
-  try {
-    const raw = localStorage.getItem(CACHE_PREFIX + key);
-    if (!raw) return null;
-    const { value, exp } = JSON.parse(raw);
-    if (typeof exp === 'number' && exp < Date.now()) {
-      localStorage.removeItem(CACHE_PREFIX + key);
+  function cacheGet(key) {
+    try {
+      var raw = localStorage.getItem(CACHE_PREFIX + key);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      var value = parsed.value;
+      var exp = parsed.exp;
+      if (typeof exp === 'number' && exp < Date.now()) {
+        localStorage.removeItem(CACHE_PREFIX + key);
+        return null;
+      }
+      return value;
+    } catch (_e) {
       return null;
     }
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-function cacheSet(key, value, ttlDays) {
-  try {
-    const exp = Date.now() + ttlDays * 86400000;
-    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ value, exp }));
-  } catch {
-    // Quota exceeded or private-mode: best-effort, drop silently.
-  }
-}
-
-export async function askGemini(prompt, opts = {}) {
-  const {
-    schema,
-    temperature,
-    model,
-    cacheKey,
-    ttlDays = DEFAULT_TTL_DAYS,
-    signal,
-    bypassCache = false,
-  } = opts;
-
-  if (cacheKey && !bypassCache) {
-    const hit = cacheGet(cacheKey);
-    if (hit !== null) return hit;
   }
 
-  const body = { prompt };
-  if (schema) body.schema = schema;
-  if (typeof temperature === 'number') body.temperature = temperature;
-  if (model) body.model = model;
-
-  const res = await fetch('/api/gemini', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
-
-  if (!res.ok) {
-    let detail;
-    try { detail = (await res.json()).error; } catch { detail = `HTTP ${res.status}`; }
-    throw new Error(`Gemini request failed: ${detail}`);
-  }
-
-  const { text } = await res.json();
-
-  if (cacheKey) cacheSet(cacheKey, text, ttlDays);
-  return text;
-}
-
-// Tiny helper: clear a single cache entry (e.g. "regenerate" button).
-export function clearGeminiCache(cacheKey) {
-  try { localStorage.removeItem(CACHE_PREFIX + cacheKey); } catch {}
-}
-
-// Wipe all cached Gemini content (e.g. settings "clear cache" button).
-export function clearAllGeminiCache() {
-  try {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(CACHE_PREFIX)) keys.push(k);
+  function cacheSet(key, value, ttlDays) {
+    try {
+      var exp = Date.now() + ttlDays * 86400000;
+      localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ value: value, exp: exp }));
+    } catch (_e) {
+      // Quota exceeded or private-mode: best-effort, drop silently.
     }
-    keys.forEach(k => localStorage.removeItem(k));
-  } catch {}
-}
+  }
+
+  function askGemini(prompt, opts) {
+    opts = opts || {};
+    var schema = opts.schema;
+    var temperature = opts.temperature;
+    var model = opts.model;
+    var cacheKey = opts.cacheKey;
+    var ttlDays = typeof opts.ttlDays === 'number' ? opts.ttlDays : DEFAULT_TTL_DAYS;
+    var signal = opts.signal;
+    var bypassCache = opts.bypassCache === true;
+
+    if (cacheKey && !bypassCache) {
+      var hit = cacheGet(cacheKey);
+      if (hit !== null) return Promise.resolve(hit);
+    }
+
+    var body = { prompt: prompt };
+    if (schema) body.schema = schema;
+    if (typeof temperature === 'number') body.temperature = temperature;
+    if (model) body.model = model;
+
+    return fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: signal
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.json().then(
+          function (j) { throw new Error('Gemini request failed: ' + (j && j.error || res.status)); },
+          function () { throw new Error('Gemini request failed: HTTP ' + res.status); }
+        );
+      }
+      return res.json();
+    }).then(function (data) {
+      var text = data.text;
+      if (cacheKey) cacheSet(cacheKey, text, ttlDays);
+      return text;
+    });
+  }
+
+  function clearGeminiCache(cacheKey) {
+    try { localStorage.removeItem(CACHE_PREFIX + cacheKey); } catch (_e) {}
+  }
+
+  function clearAllGeminiCache() {
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(CACHE_PREFIX) === 0) keys.push(k);
+      }
+      for (var j = 0; j < keys.length; j++) localStorage.removeItem(keys[j]);
+    } catch (_e) {}
+  }
+
+  // Expose on window for classic-script consumers.
+  root.askGemini = askGemini;
+  root.clearGeminiCache = clearGeminiCache;
+  root.clearAllGeminiCache = clearAllGeminiCache;
+})(typeof window !== 'undefined' ? window : this);

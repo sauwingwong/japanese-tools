@@ -300,13 +300,14 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
   });
 })();
 </script>
-<script type="module" onerror="window.__dbg && window.__dbg('MODULE-TAG-ERROR fired')">
-  window.__dbg && window.__dbg('2a: outer module tag ran (pre-import test)');
-</script>
+<!-- Load gemini helpers as classic script so iOS Safari parses it reliably.
+     It attaches window.askGemini / window.clearGeminiCache. -->
+<script src="/js/gemini.js"
+        onload="window.__dbg && window.__dbg('4: loaded gemini.js classic (askGemini=' + (typeof window.askGemini) + ')')"
+        onerror="window.__dbg && window.__dbg('LOAD gemini.js FAILED (classic script)')"></script>
 <script type="module">
-// Use dynamic import so we can catch load failures on iOS.
 window.__dbg && window.__dbg('2: main module script started');
-let createSRS, askGemini;
+let createSRS;
 try {
   const mSrs = await import('/js/srs.js');
   createSRS = mSrs.createSRS;
@@ -315,26 +316,9 @@ try {
   window.__dbg && window.__dbg('IMPORT srs.js FAILED: ' + (e && (e.message || e.name) || 'unknown'));
   throw e;
 }
-try {
-  const mGem = await import('/js/gemini.js');
-  askGemini = mGem.askGemini;
-  window.__dbg && window.__dbg('4: imported gemini.js (askGemini=' + (typeof askGemini) + ')');
-} catch (e) {
-  window.__dbg && window.__dbg('IMPORT gemini.js FAILED: ' + (e && (e.message || e.name) || 'unknown'));
-  // Fetch the file raw to see what iOS is actually getting.
-  try {
-    const probe = await fetch('/js/gemini.js', { cache: 'no-cache' });
-    const txt = await probe.text();
-    window.__dbg && window.__dbg(
-      '4-probe: status=' + probe.status +
-      ' ct=' + (probe.headers.get('content-type') || '?') +
-      ' len=' + txt.length +
-      ' first80=' + txt.slice(0, 80).replace(/\n/g, '\\n')
-    );
-  } catch (pe) {
-    window.__dbg && window.__dbg('4-probe FETCH FAILED: ' + (pe.message || pe));
-  }
-  throw e;
+const askGemini = window.askGemini;
+if (typeof askGemini !== 'function') {
+  window.__dbg && window.__dbg('WARN: window.askGemini not available — Gemini features disabled');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
