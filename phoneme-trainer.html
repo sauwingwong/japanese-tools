@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Japanese Phoneme Trainer</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#c62828">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Japanese">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f4; color: #222; }
@@ -467,6 +473,7 @@ if (USE_GEMINI) {
 // ── Gemini TTS ──
 let _audioCtx = null;
 let _currentSource = null;
+let _currentAbort = null;
 
 function _getAudioCtx() {
   if (!_audioCtx || _audioCtx.state === 'closed') _audioCtx = new AudioContext();
@@ -475,6 +482,7 @@ function _getAudioCtx() {
 
 function _stopGeminiAudio() {
   if (_currentSource) { try { _currentSource.stop(); } catch(e) {} _currentSource = null; }
+  if (_currentAbort) { _currentAbort.abort(); _currentAbort = null; }
 }
 
 // Single-mora playback uses 2.5 — 3.1 adds unwanted filler-word prosody to
@@ -483,6 +491,12 @@ const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
 
 async function speakGemini(text, opts) {
   _stopGeminiAudio();
+  const ctx = _getAudioCtx();
+  // iOS Safari: AudioContext starts suspended until resumed inside a user gesture.
+  if (ctx.state === 'suspended') { try { await ctx.resume(); } catch(e) {} }
+
+  const ac = new AbortController();
+  _currentAbort = ac;
   let data;
   try {
     const body = { text };
@@ -490,19 +504,21 @@ async function speakGemini(text, opts) {
     const res = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: ac.signal
     });
     data = await res.json();
   } catch(e) {
+    if (e.name === 'AbortError') return; // superseded by a newer speak() call
     console.warn('Gemini TTS fetch failed, falling back:', e);
     return speakWebSpeech(text, 0.9);
   }
+  if (ac.signal.aborted) return; // raced by a later call — don't play
   if (!data.audio) {
     console.warn('Gemini TTS: no audio returned', data);
     return speakWebSpeech(text, 0.9);
   }
   const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
-  const ctx = _getAudioCtx();
   const buf = ctx.createBuffer(1, bytes.length / 2, 24000);
   const ch = buf.getChannelData(0);
   const view = new DataView(bytes.buffer);
@@ -1233,6 +1249,7 @@ let shadTotal = 0;
 let shadUsed = new Set();
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 let shadRec = null;
 
 if (SpeechRecognition) {
@@ -1240,10 +1257,48 @@ if (SpeechRecognition) {
   shadRec.lang = 'ja-JP';
   shadRec.interimResults = false;
   shadRec.maxAlternatives = 5;
-} else {
+} else if (!isMobile) {
   document.getElementById('shad-no-support').style.display = 'block';
   document.getElementById('shad-speak').disabled = true;
   document.getElementById('shad-speak').textContent = '🎤 Chrome only';
+}
+
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac'];
+  for (const t of types) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+
+async function recordAndTranscribe(durationMs = 3000) {
+  const mimeType = getSupportedMimeType();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        try {
+          const res = await fetch('/api/stt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: base64, mimeType: mimeType || 'audio/webm' })
+          });
+          const data = await res.json();
+          resolve(data.transcript || '');
+        } catch (e) { reject(e); }
+      };
+      reader.readAsDataURL(blob);
+    };
+    rec.start();
+    setTimeout(() => rec.stop(), durationMs);
+  });
 }
 
 function katakanaToHiragana(str) {
@@ -1294,7 +1349,7 @@ function shadNewWord() {
   document.getElementById('shad-meaning').textContent = shadCurrent.meaning;
   document.getElementById('shad-result').innerHTML = '';
   document.getElementById('shad-speak').textContent = '🎤 Speak';
-  document.getElementById('shad-speak').disabled = !SpeechRecognition;
+  document.getElementById('shad-speak').disabled = !SpeechRecognition && !isMobile;
 
   // Update "In sentence" button
   const sentBtn = document.getElementById('shad-sentence');
@@ -1345,71 +1400,79 @@ document.getElementById('shad-sentence').addEventListener('click', () => {
   if (shadCurrent && shadCurrent.sentence) speak(shadCurrent.sentence, 0.8);
 });
 
-document.getElementById('shad-speak').addEventListener('click', () => {
-  if (!shadRec || !shadCurrent) return;
+function shadShowResult(alternatives) {
+  const resultEl = document.getElementById('shad-result');
+  let bestLevel = 'miss';
+  let bestAlt = alternatives[0];
+  for (const alt of alternatives) {
+    const lv = compareMatch(shadCurrent.text, alt, shadCurrent.kanji);
+    if (['exact','close','partial','miss'].indexOf(lv) <
+        ['exact','close','partial','miss'].indexOf(bestLevel)) {
+      bestLevel = lv; bestAlt = alt;
+    }
+  }
+  shadTotal++;
+  if (bestLevel === 'exact' || bestLevel === 'close') shadCorrect++;
+  shadUpdateScore();
+  const cfg = {
+    exact:   { cls: 'shad-exact',   icon: '✓', label: 'Great match — well done!',          color: '#2e7d32' },
+    close:   { cls: 'shad-close',   icon: '~', label: 'Close — keep practicing!',          color: '#e65100' },
+    partial: { cls: 'shad-partial', icon: '△', label: 'Partial match — try again',         color: '#bf360c' },
+    miss:    { cls: 'shad-miss',    icon: '✗', label: 'Not recognised — listen and retry', color: '#b71c1c' },
+  }[bestLevel];
+  const altLine = alternatives.length > 1
+    ? `<div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Other guesses: ${alternatives.slice(1,4).join(' / ')}</div>`
+    : '';
+  resultEl.innerHTML = `
+    <div class="shad-result-box ${cfg.cls}">
+      <div style="font-size:1rem; font-weight:600; color:${cfg.color}; margin-bottom:6px;">${cfg.icon} ${cfg.label}</div>
+      <div><span style="color:#888; font-size:0.82rem;">You said: </span>
+           <span style="font-size:1.2rem; font-weight:600;">${bestAlt}</span></div>
+      <div style="font-size:0.82rem; color:#888; margin-top:4px;">
+        Target: <strong>${shadCurrent.text}</strong> (${shadCurrent.reading})
+      </div>
+      ${altLine}
+    </div>`;
+}
+
+document.getElementById('shad-speak').addEventListener('click', async () => {
+  if (!shadCurrent) return;
   const resultEl = document.getElementById('shad-result');
   const btn = document.getElementById('shad-speak');
   btn.textContent = '🔴 Listening…';
   btn.disabled = true;
   resultEl.innerHTML = '<span style="color:#888; font-size:0.88rem;">Listening… say the word now</span>';
 
+  if (!shadRec && isMobile) {
+    try {
+      const transcript = await recordAndTranscribe(3000);
+      shadShowResult([transcript]);
+    } catch (e) {
+      resultEl.innerHTML = `<div class="shad-result-box shad-miss">⚠ ${e.message || 'Mic error — check permissions'}</div>`;
+    }
+    btn.textContent = '🎤 Speak';
+    btn.disabled = false;
+    return;
+  }
+
+  if (!shadRec) return;
   shadRec.onresult = (ev) => {
     const alternatives = Array.from(ev.results[0]).map(r => r.transcript);
-    const best = alternatives[0];
-
-    // Try all alternatives for best match (check hiragana AND kanji forms)
-    let bestLevel = 'miss';
-    let bestAlt = best;
-    for (const alt of alternatives) {
-      const lv = compareMatch(shadCurrent.text, alt, shadCurrent.kanji);
-      if (['exact','close','partial','miss'].indexOf(lv) <
-          ['exact','close','partial','miss'].indexOf(bestLevel)) {
-        bestLevel = lv; bestAlt = alt;
-      }
-    }
-
-    shadTotal++;
-    if (bestLevel === 'exact' || bestLevel === 'close') shadCorrect++;
-    shadUpdateScore();
-
-    const cfg = {
-      exact:   { cls: 'shad-exact',   icon: '✓', label: 'Great match — well done!',          color: '#2e7d32' },
-      close:   { cls: 'shad-close',   icon: '~', label: 'Close — keep practicing!',          color: '#e65100' },
-      partial: { cls: 'shad-partial', icon: '△', label: 'Partial match — try again',         color: '#bf360c' },
-      miss:    { cls: 'shad-miss',    icon: '✗', label: 'Not recognised — listen and retry', color: '#b71c1c' },
-    }[bestLevel];
-
-    const altLine = alternatives.length > 1
-      ? `<div style="font-size:0.75rem; color:#aaa; margin-top:4px;">Other guesses: ${alternatives.slice(1,4).join(' / ')}</div>`
-      : '';
-
-    resultEl.innerHTML = `
-      <div class="shad-result-box ${cfg.cls}">
-        <div style="font-size:1rem; font-weight:600; color:${cfg.color}; margin-bottom:6px;">${cfg.icon} ${cfg.label}</div>
-        <div><span style="color:#888; font-size:0.82rem;">You said: </span>
-             <span style="font-size:1.2rem; font-weight:600;">${bestAlt}</span></div>
-        <div style="font-size:0.82rem; color:#888; margin-top:4px;">
-          Target: <strong>${shadCurrent.text}</strong> (${shadCurrent.reading})
-        </div>
-        ${altLine}
-      </div>`;
+    shadShowResult(alternatives);
   };
-
   shadRec.onerror = (ev) => {
     const msgs = {
-      'no-speech':         'No speech detected — make sure your mic is on and try again.',
-      'not-allowed':       'Microphone access denied. Allow mic in browser settings.',
-      'audio-capture':     'No microphone found.',
-      'network':           'Network error — speech recognition needs internet.',
+      'no-speech':     'No speech detected — make sure your mic is on and try again.',
+      'not-allowed':   'Microphone access denied. Allow mic in browser settings.',
+      'audio-capture': 'No microphone found.',
+      'network':       'Network error — speech recognition needs internet.',
     };
     resultEl.innerHTML = `<div class="shad-result-box shad-miss">⚠ ${msgs[ev.error] || 'Error: ' + ev.error}</div>`;
   };
-
   shadRec.onend = () => {
     btn.textContent = '🎤 Speak';
-    btn.disabled = !SpeechRecognition;
+    btn.disabled = false;
   };
-
   try { shadRec.start(); } catch (e) { /* already running */ }
 });
 
@@ -1434,6 +1497,11 @@ document.getElementById('shad-filter').addEventListener('click', e => {
 document.querySelector('[data-panel="shadowing"]').addEventListener('click', () => {
   if (!shadCurrent) shadNewWord();
 });
+</script>
+<script>
+if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW fail:', err));
+}
 </script>
 </body>
 </html>
