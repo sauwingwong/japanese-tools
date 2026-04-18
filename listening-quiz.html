@@ -226,13 +226,14 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
 <div class="container">
 
+  <div class="filter-bar" id="level-bar">
+    <button class="cat-btn active" data-level="all">All levels</button>
+    <button class="cat-btn" data-level="N5">N5</button>
+    <button class="cat-btn" data-level="N4">N4</button>
+  </div>
+
   <div class="filter-bar" id="filter-bar">
-    <button class="cat-btn active" data-cat="all">All</button>
-    <button class="cat-btn" data-cat="greeting">Greetings</button>
-    <button class="cat-btn" data-cat="time">Time</button>
-    <button class="cat-btn" data-cat="verb">Verbs</button>
-    <button class="cat-btn" data-cat="adj">Adjectives</button>
-    <button class="cat-btn" data-cat="noun">Nouns</button>
+    <!-- populated from data -->
   </div>
 
   <div id="score-bar">
@@ -277,128 +278,14 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
 <script type="module">
 import { createSRS } from '/js/srs.js';
+import { askGemini } from '/js/gemini.js';
+
 // ═══════════════════════════════════════════════════════════════════════
-// VOCABULARY DATA  (hiragana, kanji, english, category, pitch pattern)
-// pitch: array of 0/1 per mora; null = unknown/skip display
+// VOCABULARY DATA — loaded from /data/vocab-n5n4.json
+// Entry shape: { h, k, e, cat, p, level: 'N5'|'N4' }
+// Example sentences are generated on-demand via Gemini (cached per word).
 // ═══════════════════════════════════════════════════════════════════════
-const VOCAB = [
-  // ── Greetings ──
-  { h:'おはよう',       k:'お早う',       e:'Good morning (casual)',       cat:'greeting', p:null,    s:'おはよう、元気ですか。' },
-  { h:'おはようございます', k:'お早うございます', e:'Good morning (polite)', cat:'greeting', p:null,  s:'先生、おはようございます。' },
-  { h:'こんにちは',     k:'今日は',       e:'Hello / Good afternoon',      cat:'greeting', p:null,    s:'こんにちは、お元気ですか。' },
-  { h:'こんばんは',     k:'今晩は',       e:'Good evening',                cat:'greeting', p:null,    s:'こんばんは、今夜はいい天気ですね。' },
-  { h:'おやすみなさい', k:'お休みなさい', e:'Good night',                  cat:'greeting', p:null,    s:'では、おやすみなさい。' },
-  { h:'ありがとう',     k:'有難う',       e:'Thank you (casual)',          cat:'greeting', p:null,    s:'助けてくれて、ありがとう。' },
-  { h:'ありがとうございます', k:'有難うございます', e:'Thank you (polite)', cat:'greeting', p:null,   s:'いつもお世話になり、ありがとうございます。' },
-  { h:'すみません',     k:'済みません',   e:'Excuse me / Sorry',           cat:'greeting', p:null,    s:'すみません、道を教えてください。' },
-  { h:'はい',          k:'はい',         e:'Yes',                         cat:'greeting', p:[1,0],    s:'はい、わかりました。' },
-  { h:'いいえ',        k:'いいえ',       e:'No',                          cat:'greeting', p:[1,0,0],  s:'いいえ、結構です。' },
-  { h:'どうぞ',        k:'どうぞ',       e:'Please / Go ahead',           cat:'greeting', p:[1,0,0],  s:'どうぞ、お入りください。' },
-  { h:'ただいま',      k:'只今',         e:"I'm home!",                   cat:'greeting', p:null,     s:'ただいま、帰りました！' },
-  { h:'おかえり',      k:'お帰り',       e:'Welcome back (casual)',       cat:'greeting', p:null,     s:'おかえり、お疲れ様。' },
-  { h:'いただきます',  k:'頂きます',     e:"Let's eat / I humbly receive", cat:'greeting', p:null,   s:'では、いただきます。' },
-  { h:'ごちそうさま',  k:'ご馳走様',     e:'Thanks for the meal',         cat:'greeting', p:null,     s:'とても美味しかったです。ごちそうさまでした。' },
-
-  // ── Time ──
-  { h:'いま',   k:'今',    e:'Now',               cat:'time', p:[0,1],   s:'今、何時ですか。' },
-  { h:'きょう', k:'今日',  e:'Today',             cat:'time', p:[1,0,0], s:'今日は晴れていますね。' },
-  { h:'あした', k:'明日',  e:'Tomorrow',          cat:'time', p:[1,0,0], s:'明日、学校に行きます。' },
-  { h:'きのう', k:'昨日',  e:'Yesterday',         cat:'time', p:[1,0,0], s:'昨日、映画を見ました。' },
-  { h:'あさ',   k:'朝',    e:'Morning',           cat:'time', p:[0,1],   s:'朝は早く起きます。' },
-  { h:'ひる',   k:'昼',    e:'Noon / Daytime',    cat:'time', p:[0,1],   s:'昼ご飯は何を食べますか。' },
-  { h:'よる',   k:'夜',    e:'Night / Evening',   cat:'time', p:[0,1],   s:'夜、本を読みます。' },
-  { h:'まいにち', k:'毎日', e:'Every day',         cat:'time', p:null,   s:'毎日練習しています。' },
-  { h:'らいしゅう', k:'来週', e:'Next week',       cat:'time', p:null,   s:'来週、友達に会います。' },
-  { h:'せんしゅう', k:'先週', e:'Last week',       cat:'time', p:null,   s:'先週、旅行に行きました。' },
-  { h:'ことし', k:'今年',  e:'This year',         cat:'time', p:null,    s:'今年は日本語を頑張ります。' },
-  { h:'まえ',   k:'前',    e:'Before / Front',    cat:'time', p:[0,1],   s:'前に一度来たことがあります。' },
-  { h:'あと',   k:'後',    e:'After / Behind',    cat:'time', p:[0,1],   s:'後で電話します。' },
-  { h:'なんじ', k:'何時',  e:'What time?',        cat:'time', p:null,    s:'今、何時ですか。' },
-  { h:'はやい', k:'早い',  e:'Early / Fast',      cat:'time', p:[1,0,0], s:'朝は早い電車で行きます。' },
-
-  // ── Verbs ──
-  { h:'たべる',   k:'食べる',   e:'to eat',              cat:'verb', p:null,    s:'夕食は何を食べますか。' },
-  { h:'のむ',     k:'飲む',     e:'to drink',            cat:'verb', p:[0,1],   s:'朝は水を飲みます。' },
-  { h:'みる',     k:'見る',     e:'to see / watch',      cat:'verb', p:[0,1],   s:'テレビを見ます。' },
-  { h:'きく',     k:'聞く',     e:'to listen / ask',     cat:'verb', p:[0,1],   s:'音楽を聞きます。' },
-  { h:'はなす',   k:'話す',     e:'to speak / talk',     cat:'verb', p:null,    s:'友達と話します。' },
-  { h:'よむ',     k:'読む',     e:'to read',             cat:'verb', p:[0,1],   s:'毎日本を読みます。' },
-  { h:'かく',     k:'書く',     e:'to write',            cat:'verb', p:[0,1],   s:'日記を書きます。' },
-  { h:'いく',     k:'行く',     e:'to go',               cat:'verb', p:[0,1],   s:'学校に行きます。' },
-  { h:'くる',     k:'来る',     e:'to come',             cat:'verb', p:[1,0],   s:'友達が来ます。' },
-  { h:'かえる',   k:'帰る',     e:'to return home',      cat:'verb', p:null,    s:'六時に家に帰ります。' },
-  { h:'する',     k:'する',     e:'to do',               cat:'verb', p:[0,1],   s:'宿題をします。' },
-  { h:'ある',     k:'ある',     e:'to exist (things)',   cat:'verb', p:[0,1],   s:'机の上に本があります。' },
-  { h:'いる',     k:'いる',     e:'to exist (people/animals)', cat:'verb', p:[0,1], s:'部屋に猫がいます。' },
-  { h:'わかる',   k:'分かる',   e:'to understand',       cat:'verb', p:null,    s:'日本語が少しわかります。' },
-  { h:'おきる',   k:'起きる',   e:'to wake up',          cat:'verb', p:null,    s:'七時に起きます。' },
-  { h:'ねる',     k:'寝る',     e:'to sleep',            cat:'verb', p:[0,1],   s:'十一時に寝ます。' },
-  { h:'たつ',     k:'立つ',     e:'to stand',            cat:'verb', p:[0,1],   s:'椅子から立ちます。' },
-  { h:'すわる',   k:'座る',     e:'to sit',              cat:'verb', p:null,    s:'椅子に座ります。' },
-  { h:'かう',     k:'買う',     e:'to buy',              cat:'verb', p:[0,1],   s:'スーパーで野菜を買います。' },
-  { h:'つかう',   k:'使う',     e:'to use',              cat:'verb', p:null,    s:'スマホをよく使います。' },
-  { h:'でる',     k:'出る',     e:'to exit / leave',     cat:'verb', p:[0,1],   s:'八時に家を出ます。' },
-  { h:'はいる',   k:'入る',     e:'to enter',            cat:'verb', p:null,    s:'お風呂に入ります。' },
-
-  // ── Adjectives ──
-  { h:'おおきい', k:'大きい',   e:'big',                 cat:'adj', p:null,    s:'大きい犬が好きです。' },
-  { h:'ちいさい', k:'小さい',   e:'small',               cat:'adj', p:null,    s:'小さい猫がいます。' },
-  { h:'たかい',   k:'高い',     e:'tall / expensive',    cat:'adj', p:[1,0,0], s:'あのビルはとても高いです。' },
-  { h:'ひくい',   k:'低い',     e:'low / short',         cat:'adj', p:[1,0,0], s:'この木は低いですね。' },
-  { h:'ながい',   k:'長い',     e:'long',                cat:'adj', p:[1,0,0], s:'この川はとても長いです。' },
-  { h:'みじかい', k:'短い',     e:'short (length)',      cat:'adj', p:null,    s:'今日の授業は短かったです。' },
-  { h:'あたらしい',k:'新しい',  e:'new',                 cat:'adj', p:null,    s:'新しいスマホを買いました。' },
-  { h:'ふるい',   k:'古い',     e:'old (things)',        cat:'adj', p:[1,0,0], s:'この家はとても古いです。' },
-  { h:'いい',     k:'良い',     e:'good',                cat:'adj', p:[1,0],   s:'今日は天気がいいですね。' },
-  { h:'わるい',   k:'悪い',     e:'bad',                 cat:'adj', p:[1,0,0], s:'体の調子が悪いです。' },
-  { h:'あつい',   k:'暑い',     e:'hot (weather)',       cat:'adj', p:[1,0,0], s:'今日はとても暑いですね。' },
-  { h:'さむい',   k:'寒い',     e:'cold (weather)',      cat:'adj', p:[1,0,0], s:'冬はとても寒いです。' },
-  { h:'つめたい', k:'冷たい',   e:'cold (to touch)',     cat:'adj', p:null,    s:'冷たい水を飲みます。' },
-  { h:'おいしい', k:'美味しい', e:'delicious',           cat:'adj', p:null,    s:'このラーメンは美味しいですね。' },
-  { h:'まずい',   k:'まずい',   e:'bad tasting',         cat:'adj', p:[1,0,0], s:'この料理は少しまずいです。' },
-  { h:'たのしい', k:'楽しい',   e:'fun / enjoyable',     cat:'adj', p:null,    s:'旅行はとても楽しいです。' },
-  { h:'むずかしい',k:'難しい',  e:'difficult',           cat:'adj', p:null,    s:'日本語は難しいですが、楽しいです。' },
-  { h:'やさしい', k:'優しい',   e:'kind / gentle / easy', cat:'adj', p:null,  s:'先生はとても優しいです。' },
-  { h:'からい',   k:'辛い',     e:'spicy / hot',         cat:'adj', p:[1,0,0], s:'この料理はとても辛いです。' },
-  { h:'あまい',   k:'甘い',     e:'sweet',               cat:'adj', p:[1,0,0], s:'このケーキはとても甘いです。' },
-
-  // ── Nouns ──
-  { h:'ひと',     k:'人',       e:'person',              cat:'noun', p:[1,0],     s:'駅に人がたくさんいます。' },
-  { h:'みず',     k:'水',       e:'water',               cat:'noun', p:[0,1],     s:'水を飲みます。' },
-  { h:'まち',     k:'町',       e:'town / city',         cat:'noun', p:[0,1],     s:'この町は静かですね。' },
-  { h:'くに',     k:'国',       e:'country',             cat:'noun', p:[0,1],     s:'どの国から来ましたか。' },
-  { h:'うち',     k:'家',       e:'home / house (casual)',cat:'noun', p:[0,1],    s:'家に帰ります。' },
-  { h:'がっこう', k:'学校',     e:'school',              cat:'noun', p:null,      s:'毎日学校に歩いて行きます。' },
-  { h:'かいしゃ', k:'会社',     e:'company',             cat:'noun', p:null,      s:'父は会社で働いています。' },
-  { h:'でんしゃ', k:'電車',     e:'train',               cat:'noun', p:[1,0,0,0], s:'電車で会社に行きます。' },
-  { h:'くるま',   k:'車',       e:'car',                 cat:'noun', p:null,      s:'車で旅行します。' },
-  { h:'ともだち', k:'友達',     e:'friend',              cat:'noun', p:null,      s:'友達と映画を見ます。' },
-  { h:'せんせい', k:'先生',     e:'teacher',             cat:'noun', p:null,      s:'先生に質問します。' },
-  { h:'がくせい', k:'学生',     e:'student',             cat:'noun', p:null,      s:'学生として頑張ります。' },
-  { h:'かぞく',   k:'家族',     e:'family',              cat:'noun', p:null,      s:'家族と一緒に食事します。' },
-  { h:'おとうさん',k:'お父さん', e:'father',             cat:'noun', p:null,      s:'お父さんは会社に行きます。' },
-  { h:'おかあさん',k:'お母さん', e:'mother',             cat:'noun', p:null,      s:'お母さんがご飯を作ります。' },
-  { h:'そと',     k:'外',       e:'outside',             cat:'noun', p:[1,0],     s:'今日は外で遊びます。' },
-  { h:'なか',     k:'中',       e:'inside / middle',     cat:'noun', p:[0,1],     s:'箱の中に何がありますか。' },
-  { h:'うえ',     k:'上',       e:'above / top',         cat:'noun', p:[0,1],     s:'机の上に本があります。' },
-  { h:'した',     k:'下',       e:'below / under',       cat:'noun', p:[0,1],     s:'椅子の下に猫がいます。' },
-  { h:'みぎ',     k:'右',       e:'right',               cat:'noun', p:[0,1],     s:'次の角を右に曲がります。' },
-  { h:'ひだり',   k:'左',       e:'left',                cat:'noun', p:[1,0,0],   s:'左に曲がると駅があります。' },
-  { h:'ほん',     k:'本',       e:'book',                cat:'noun', p:[1,0],     s:'本を読みます。' },
-  { h:'かばん',   k:'鞄',       e:'bag',                 cat:'noun', p:null,      s:'鞄を持って出かけます。' },
-  { h:'でんわ',   k:'電話',     e:'telephone',           cat:'noun', p:null,      s:'電話をかけます。' },
-  { h:'ごはん',   k:'ご飯',     e:'rice / meal',         cat:'noun', p:null,      s:'ご飯を食べます。' },
-  { h:'にく',     k:'肉',       e:'meat',                cat:'noun', p:[1,0],     s:'肉が好きです。' },
-  { h:'さかな',   k:'魚',       e:'fish',                cat:'noun', p:[0,1,1],   s:'魚を食べます。' },
-  { h:'やさい',   k:'野菜',     e:'vegetable',           cat:'noun', p:null,      s:'野菜をたくさん食べます。' },
-  { h:'てんき',   k:'天気',     e:'weather',             cat:'noun', p:[1,0,0],   s:'今日は天気がいいですね。' },
-  { h:'いぬ',     k:'犬',       e:'dog',                 cat:'noun', p:[1,0],     s:'犬を散歩させます。' },
-  { h:'ねこ',     k:'猫',       e:'cat',                 cat:'noun', p:[0,1],     s:'部屋に猫がいます。' },
-  { h:'そら',     k:'空',       e:'sky',                 cat:'noun', p:[1,0],     s:'空が青いです。' },
-  { h:'はな',     k:'花',       e:'flower',              cat:'noun', p:[1,0],     s:'花がきれいです。' },
-  { h:'かわ',     k:'川',       e:'river',               cat:'noun', p:[0,1],     s:'川で魚を釣ります。' },
-  { h:'やま',     k:'山',       e:'mountain',            cat:'noun', p:[0,1],     s:'山に登ります。' },
-];
+let VOCAB = [];
 
 // ═══════════════════════════════════════════════════════════════════════
 // VOICE — auto-selects Gemini TTS (deployed) or Web Speech (local)
@@ -535,22 +422,65 @@ let pool = [];           // current filtered pool
 const srs = createSRS('n5n4-vocab');
 let seenWords = new Set();
 let currentWord = null;
+let currentSentence = null; // {ja, en} from Gemini, populated on reveal
 let answered = false;
 let correct = 0;
 let total = 0;
 let streak = 0;
 let wrongWords = [];     // {word, yourAnswer} for review
-let activeCat = 'all';
+let activeCat = localStorage.getItem('quiz/cat') || 'all';
+let activeLevel = localStorage.getItem('quiz/level') || 'all';
 const SESSION_LENGTH = 20;
 
-function initPool(cat) {
-  activeCat = cat;
-  pool = cat === 'all' ? [...VOCAB] : VOCAB.filter(w => w.cat === cat);
+// Friendly display names for category chips.
+const CAT_LABELS = {
+  greeting: 'Greetings', time: 'Time', verb: 'Verbs',
+  'i-adj': 'i-adj', 'na-adj': 'na-adj', noun: 'Nouns',
+  adverb: 'Adverbs', counter: 'Counters',
+  particle: 'Particles', expression: 'Expressions',
+};
+
+function applyFilters() {
+  return VOCAB.filter(w =>
+    (activeLevel === 'all' || w.level === activeLevel) &&
+    (activeCat === 'all' || w.cat === activeCat)
+  );
+}
+
+function rebuildCategoryBar() {
+  const bar = document.getElementById('filter-bar');
+  const inLevel = activeLevel === 'all' ? VOCAB : VOCAB.filter(w => w.level === activeLevel);
+  const cats = [...new Set(inLevel.map(w => w.cat))].sort();
+  bar.innerHTML = '';
+  const mk = (val, label) => {
+    const b = document.createElement('button');
+    b.className = 'cat-btn' + (activeCat === val ? ' active' : '');
+    b.dataset.cat = val;
+    b.textContent = label;
+    bar.appendChild(b);
+  };
+  mk('all', 'All');
+  cats.forEach(c => mk(c, CAT_LABELS[c] || c));
+  // If the previously-selected category isn't in the new level, fall back to 'all'.
+  if (activeCat !== 'all' && !cats.includes(activeCat)) {
+    activeCat = 'all';
+    localStorage.setItem('quiz/cat', 'all');
+    bar.querySelector('[data-cat="all"]').classList.add('active');
+  }
+}
+
+function initPool() {
+  pool = applyFilters();
   seenWords.clear();
   correct = 0; total = 0; streak = 0; wrongWords = [];
   updateScore();
   document.getElementById('end-screen').style.display = 'none';
   document.getElementById('quiz-card').style.display = 'block';
+  if (!pool.length) {
+    document.getElementById('feedback-text').textContent = 'No words match this filter.';
+    document.getElementById('options-grid').innerHTML = '';
+    return;
+  }
   nextQuestion();
 }
 
@@ -569,9 +499,11 @@ function nextQuestion() {
   if (total >= SESSION_LENGTH) { showEndScreen(); return; }
 
   answered = false;
+  currentSentence = null;
   document.getElementById('feedback-text').textContent = '';
   document.getElementById('reveal').style.display = 'none';
   document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('speak-result').innerHTML = '';
 
   const idx = pickWord();
   currentWord = { word: pool[idx], idx };
@@ -656,20 +588,71 @@ function showReveal(word) {
       </div>`;
   }
 
-  const sentenceHTML = word.s
-    ? `<div class="rv-row" style="margin-top:8px;">
-         <button onclick="speak('${word.s.replace(/'/g, "\\'")}', 0.8)" style="background:#f3e5f5; border:1px solid #ce93d8; border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; color:#4a148c;">▶ ${word.s}</button>
-       </div>`
-    : '';
-
   rv.innerHTML = `
     <div class="rv-word">${word.h} 【${word.k}】</div>
     <div class="rv-row">📖 ${word.e}</div>
-    <div class="rv-row" style="font-size:0.78rem; color:#999; margin-top:2px;">Category: ${word.cat}</div>
+    <div class="rv-row" style="font-size:0.78rem; color:#999; margin-top:2px;">
+      ${word.level || 'N5'} · ${word.cat}
+    </div>
     ${pitchHTML}
-    ${sentenceHTML}
+    <div id="rv-sentence-slot" style="margin-top:10px;">
+      <button id="gen-sentence-btn" style="background:#f3e5f5; border:1px solid #ce93d8; border-radius:6px; padding:6px 12px; font-size:0.82rem; cursor:pointer; color:#4a148c;">
+        ✨ Show example sentence
+      </button>
+    </div>
   `;
   rv.style.display = 'block';
+  const genBtn = document.getElementById('gen-sentence-btn');
+  if (genBtn) genBtn.addEventListener('click', () => fetchAndShowSentence(word));
+}
+
+// ── Gemini-generated example sentence, cached per word. ──
+const SENTENCE_SCHEMA = {
+  type: 'object',
+  properties: {
+    ja: { type: 'string' },
+    en: { type: 'string' },
+  },
+  required: ['ja', 'en'],
+};
+
+async function getSentenceFor(word) {
+  const raw = await askGemini(
+    `Write one short ${word.level || 'N5'}-level Japanese sentence that uses the word ${word.h}${word.k && word.k !== word.h ? ' (written as ' + word.k + ')' : ''} meaning "${word.e}". Keep it under 15 mora, grammatically natural, and suitable for a beginner. Return JSON {ja, en}.`,
+    { schema: SENTENCE_SCHEMA, cacheKey: 'vocab/' + word.h, ttlDays: 30 }
+  );
+  let data = raw;
+  if (typeof raw === 'string') { try { data = JSON.parse(raw); } catch { throw new Error('Bad JSON from Gemini'); } }
+  if (!data || !data.ja) throw new Error('No sentence returned');
+  return data;
+}
+
+async function fetchAndShowSentence(word) {
+  const slot = document.getElementById('rv-sentence-slot');
+  if (slot) slot.innerHTML = '<span style="color:#888;font-size:0.85rem;">✨ Generating example…</span>';
+  try {
+    const data = await getSentenceFor(word);
+    currentSentence = data;
+    if (slot) {
+      slot.innerHTML = `
+        <div class="rv-row" style="margin-bottom:4px;">
+          <button id="play-example-btn" style="background:#f3e5f5; border:1px solid #ce93d8; border-radius:6px; padding:4px 10px; font-size:0.85rem; cursor:pointer; color:#4a148c;">▶ ${escapeHTML(data.ja)}</button>
+        </div>
+        <div class="rv-row" style="font-size:0.78rem; color:#666;">${escapeHTML(data.en || '')}</div>
+      `;
+      const pb = document.getElementById('play-example-btn');
+      if (pb) pb.addEventListener('click', () => speak(data.ja, 0.85));
+    }
+    speak(data.ja, 0.85);
+  } catch (e) {
+    if (slot) slot.innerHTML = `<span style="color:#c62828;font-size:0.82rem;">⚠ Couldn't fetch example: ${escapeHTML(e.message || 'unknown')}</span>`;
+  }
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
 }
 
 function updateScore() {
@@ -720,22 +703,58 @@ document.getElementById('play-btn').addEventListener('click', () => {
 document.getElementById('play-slow').addEventListener('click', () => {
   if (currentWord) speak(currentWord.word.h, 0.55);
 });
-document.getElementById('play-sentence-btn').addEventListener('click', () => {
-  if (currentWord && currentWord.word.s) speak(currentWord.word.s, 0.8);
+document.getElementById('play-sentence-btn').addEventListener('click', async () => {
+  if (!currentWord) return;
+  if (currentSentence && currentSentence.ja) {
+    speak(currentSentence.ja, 0.85);
+  } else {
+    // No sentence yet — fetch then it will auto-play.
+    await fetchAndShowSentence(currentWord.word);
+  }
 });
 document.getElementById('next-btn').addEventListener('click', nextQuestion);
-document.getElementById('reset-btn').addEventListener('click', () => initPool(activeCat));
-document.getElementById('restart-btn').addEventListener('click', () => initPool(activeCat));
+document.getElementById('reset-btn').addEventListener('click', () => initPool());
+document.getElementById('restart-btn').addEventListener('click', () => initPool());
+
+document.getElementById('level-bar').addEventListener('click', e => {
+  if (!e.target.classList.contains('cat-btn')) return;
+  document.querySelectorAll('#level-bar .cat-btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  activeLevel = e.target.dataset.level;
+  localStorage.setItem('quiz/level', activeLevel);
+  rebuildCategoryBar();
+  initPool();
+});
 
 document.getElementById('filter-bar').addEventListener('click', e => {
   if (!e.target.classList.contains('cat-btn')) return;
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#filter-bar .cat-btn').forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
-  initPool(e.target.dataset.cat);
+  activeCat = e.target.dataset.cat;
+  localStorage.setItem('quiz/cat', activeCat);
+  initPool();
 });
 
-// Start
-initPool('all');
+// ── Bootstrap: load vocab JSON, then start. ──
+async function bootstrap() {
+  try {
+    const res = await fetch('/data/vocab-n5n4.json', { cache: 'force-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    VOCAB = await res.json();
+  } catch (e) {
+    document.getElementById('feedback-text').textContent =
+      '⚠ Failed to load vocabulary. Check your connection and reload.';
+    console.error('vocab load failed:', e);
+    return;
+  }
+  // Restore level toggle active state from localStorage.
+  document.querySelectorAll('#level-bar .cat-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.level === activeLevel);
+  });
+  rebuildCategoryBar();
+  initPool();
+}
+bootstrap();
 
 // ═══════════════════════════════════════════════════════════════════════
 // SPEECH RECOGNITION — "Say it aloud" button
