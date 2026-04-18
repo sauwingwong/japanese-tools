@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listening Dictation — N5/N4</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#00695c">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dictation">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { overscroll-behavior-y: contain; }
+body { font-family:'Hiragino Sans','Hiragino Kaku Gothic ProN',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f4f4f4; color:#222; min-height:100vh; -webkit-tap-highlight-color: transparent; }
+header { background:#00695c; color:white; padding:16px 20px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  display:flex; justify-content:space-between; align-items:center; }
+header h1 { font-size:1.1rem; font-weight:600; }
+header a { color:#fff; text-decoration:none; font-size:0.85rem; opacity:0.9; }
+main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+.filter-bar { display:flex; gap:8px; margin-bottom:14px; justify-content:center; }
+.filter-bar button { background:#fff; border:1.5px solid #ddd; border-radius:18px;
+  padding:6px 16px; font-size:0.85rem; font-weight:500; cursor:pointer; color:#555; }
+.filter-bar button.active { background:#00695c; color:#fff; border-color:#00695c; }
+
+.card { background:#fff; border-radius:14px; padding:22px; box-shadow:0 2px 10px rgba(0,0,0,0.06); margin-bottom:14px; }
+
+.score-bar { display:flex; justify-content:space-between; padding:6px 0 14px; font-size:0.85rem; color:#666; }
+.score-bar strong { color:#00695c; }
+
+.play-controls { display:flex; gap:10px; justify-content:center; margin:18px 0; flex-wrap:wrap; }
+.play-btn {
+  background:#00695c; color:#fff; border:none; border-radius:10px;
+  padding:14px 22px; font-size:1rem; font-weight:600; cursor:pointer;
+  min-width: 44px; min-height: 44px;
+}
+.play-btn.secondary { background:#fff; color:#00695c; border:1.5px solid #00695c; }
+.play-btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+textarea#input {
+  width:100%; border:1.5px solid #ddd; border-radius:10px;
+  padding:14px; font-size:1.1rem; resize:vertical; min-height:80px;
+  font-family:inherit; color:#222;
+}
+textarea#input:focus { outline:none; border-color:#00695c; }
+
+.controls { display:flex; gap:10px; justify-content:center; margin-top:14px; }
+.controls button {
+  background:#00695c; color:#fff; border:none; border-radius:8px;
+  padding:10px 24px; font-size:0.95rem; font-weight:600; cursor:pointer;
+}
+.controls button.secondary { background:#fff; color:#00695c; border:1.5px solid #00695c; }
+
+.reveal { display:none; margin-top:16px; padding:14px; background:#f0f7f6; border-radius:10px; }
+.reveal.visible { display:block; }
+.reveal .label { font-size:0.7rem; color:#00695c; font-weight:600; letter-spacing:0.02em; margin-bottom:4px; }
+.reveal .ja { font-size:1.1rem; margin-bottom:4px; }
+.reveal .en { font-size:0.82rem; color:#666; }
+
+.result { margin-top:12px; text-align:center; font-size:1.05rem; font-weight:600; min-height:24px; }
+.result.ok { color:#2e7d32; }
+.result.miss { color:#c62828; }
+
+.diff { margin-top:10px; font-size:1rem; line-height:1.5; text-align:center; background:#fafafa; padding:10px; border-radius:8px; }
+.diff .good { color:#2e7d32; }
+.diff .bad  { color:#c62828; text-decoration:line-through; }
+.diff .miss { color:#c62828; background:#ffebee; padding:0 3px; border-radius:3px; }
+
+#coach-box { display:none; background:#fff3e0; border-left:3px solid #ef6c00;
+  padding:12px 14px; border-radius:8px; margin-top:12px; font-size:0.88rem; line-height:1.55; color:#5d4037; }
+#coach-box.visible { display:block; }
+.coach-label { font-weight:600; color:#ef6c00; margin-bottom:4px; font-size:0.75rem; }
+.category-chip { display:inline-block; background:#ef6c00; color:#fff; font-size:0.68rem; padding:2px 8px; border-radius:10px; margin-left:8px; }
+
+.tabbar-mobile {
+  display:none; position:fixed; bottom:0; left:0; right:0; z-index:50;
+  background:rgba(255,255,255,0.92); backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  border-top:1px solid rgba(0,0,0,0.08);
+  padding-bottom: env(safe-area-inset-bottom);
+  grid-template-columns: repeat(4, 1fr); font-size:0.68rem;
+}
+@media(max-width:600px){ .tabbar-mobile { display:grid; } }
+.tabi { background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 0 6px; color:#666; text-decoration:none; font:inherit; font-size:0.65rem; cursor:pointer; }
+.tabi-ico { font-size:1.3rem; line-height:1; }
+.tabi.active { color:#00695c; font-weight:600; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/">‹ Home</a>
+  <h1>✍️ Dictation</h1>
+  <a href="#" id="stats-btn" title="Error categories">📊</a>
+</header>
+
+<main>
+  <div class="filter-bar" id="filter-bar">
+    <button data-level="N5" class="active">N5</button>
+    <button data-level="N4">N4</button>
+  </div>
+
+  <div class="card">
+    <div class="score-bar">
+      <span>Round <strong id="round-num">1</strong> · Correct <strong id="correct-num">0</strong></span>
+      <span>Weak spot: <strong id="weak-cat">—</strong></span>
+    </div>
+
+    <div class="play-controls">
+      <button class="play-btn" id="play-btn">🔊 Play</button>
+      <button class="play-btn secondary" id="slow-btn">🐢 Slow</button>
+    </div>
+
+    <textarea id="input" placeholder="Type what you heard (hiragana / kana)…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+
+    <div class="controls">
+      <button id="submit-btn">Submit</button>
+      <button id="skip-btn" class="secondary">Skip →</button>
+    </div>
+
+    <div class="result" id="result"></div>
+    <div class="diff" id="diff" style="display:none"></div>
+
+    <div class="reveal" id="reveal">
+      <div class="label">ANSWER</div>
+      <div class="ja" id="reveal-ja"></div>
+      <div class="en" id="reveal-en"></div>
+    </div>
+
+    <div id="coach-box"></div>
+
+    <div class="controls" style="margin-top:18px;">
+      <button id="next-btn" style="display:none">Next →</button>
+    </div>
+  </div>
+</main>
+
+<nav class="tabbar-mobile">
+  <a class="tabi" href="/"><span class="tabi-ico">🏠</span>Home</a>
+  <a class="tabi" href="/grammar.html"><span class="tabi-ico">🧠</span>Grammar</a>
+  <a class="tabi" href="/kanji.html"><span class="tabi-ico">🈁</span>Kanji</a>
+  <a class="tabi active" href="/dictation.html"><span class="tabi-ico">✍️</span>Dictation</a>
+</nav>
+
+<script type="module">
+import { askGemini } from '/js/gemini.js';
+
+const TOPICS = ['daily life', 'food', 'school', 'travel', 'work', 'shopping', 'weather', 'family', 'weekend plans', 'transport'];
+
+let level = localStorage.getItem('dictation-level') || 'N5';
+let current = null; // {ja, reading, en}
+let roundNum = 0;
+let correctCount = 0;
+let errorCats = JSON.parse(localStorage.getItem('dictation-errors') || '{}');
+let answered = false;
+
+function saveErrors() { localStorage.setItem('dictation-errors', JSON.stringify(errorCats)); }
+function weakest() {
+  const entries = Object.entries(errorCats).sort((a,b) => b[1] - a[1]);
+  return entries.length ? entries[0][0] : '—';
+}
+
+document.querySelectorAll('#filter-bar button').forEach(b => {
+  b.addEventListener('click', () => {
+    level = b.dataset.level;
+    localStorage.setItem('dictation-level', level);
+    document.querySelectorAll('#filter-bar button').forEach(x => x.classList.toggle('active', x.dataset.level === level));
+    nextRound();
+  });
+});
+document.querySelectorAll('#filter-bar button').forEach(x => x.classList.toggle('active', x.dataset.level === level));
+
+// ── TTS ──
+let _ctx = null;
+let _lastAudio = null;
+async function speak(text, slow = false) {
+  try {
+    if (_lastAudio && !slow) {
+      // replay cached
+      const src = _ctx.createBufferSource();
+      src.buffer = _lastAudio; src.connect(_ctx.destination); src.playbackRate.value = slow ? 0.7 : 1;
+      src.start(); return;
+    }
+    const res = await fetch('/api/tts', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) return;
+    const { audio } = await res.json();
+    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+    if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_ctx.state !== 'running') await _ctx.resume();
+    const pcm = new Int16Array(bytes.buffer);
+    const buf = _ctx.createBuffer(1, pcm.length, 24000);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+    _lastAudio = buf;
+    const src = _ctx.createBufferSource();
+    src.buffer = buf; src.connect(_ctx.destination);
+    src.playbackRate.value = slow ? 0.7 : 1;
+    src.start();
+  } catch(e) { console.warn('TTS', e); }
+}
+
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (current) speak(current.ja, false);
+});
+document.getElementById('slow-btn').addEventListener('click', () => {
+  if (current) speak(current.ja, true);
+});
+
+// ── Gemini: generate a sentence ──
+const sentenceSchema = {
+  type:'object',
+  properties:{
+    ja: { type:'string' },
+    reading: { type:'string' },
+    en: { type:'string' }
+  },
+  required: ['ja','reading','en']
+};
+
+async function generateSentence() {
+  const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+  const prompt = level === 'N5'
+    ? `Generate ONE short JLPT N5-level Japanese sentence (5-10 mora) about "${topic}". Use ONLY N5 vocab and N5 grammar (です/ます/た/て-form/は/が/を/に/で/と/も). No kanji only in reading. Return JSON {ja (with kanji where natural), reading (full hiragana), en (English translation)}.`
+    : `Generate ONE JLPT N4-level Japanese sentence (8-15 mora) about "${topic}". Use common N4 vocab and one natural N4 grammar point. Return JSON {ja (with kanji where natural), reading (full hiragana), en (English translation)}.`;
+
+  try {
+    return await askGemini(prompt, {
+      schema: sentenceSchema,
+      temperature: 0.9,
+      // don't cache — freshness is the point
+    });
+  } catch(e) {
+    console.warn('gen failed', e);
+    return { ja: 'きょうは てんきが いいです。', reading: 'きょうはてんきがいいです', en: 'The weather is nice today.' };
+  }
+}
+
+// ── Grading ──
+function normalizeKana(s) {
+  return s
+    .replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .replace(/[、。,.!?！？\s「」『』・ー〜~]/g, '')
+    .toLowerCase();
+}
+
+function diffRender(user, target) {
+  const u = normalizeKana(user);
+  const t = normalizeKana(target);
+  // Simple char-level diff: LCS-like mark
+  // For brevity use basic alignment
+  let html = '';
+  const maxLen = Math.max(u.length, t.length);
+  for (let i = 0; i < maxLen; i++) {
+    const uc = u[i], tc = t[i];
+    if (uc === tc && uc != null) html += `<span class="good">${escapeHtml(tc)}</span>`;
+    else if (tc == null) html += `<span class="bad">${escapeHtml(uc)}</span>`;
+    else if (uc == null) html += `<span class="miss">${escapeHtml(tc)}</span>`;
+    else html += `<span class="miss">${escapeHtml(tc)}</span>`;
+  }
+  return html;
+}
+
+const gradeSchema = {
+  type: 'object',
+  properties: {
+    category: { type: 'string' },
+    hint: { type: 'string' }
+  },
+  required: ['category','hint']
+};
+
+async function gradeError(target, user) {
+  const prompt = `A JLPT ${level} learner is doing a dictation drill.
+Target sentence (hiragana): ${target}
+What they typed: ${user}
+Classify their main error as ONE of: "particle", "verb-ending", "homophone", "mora-count", "vocab", "other".
+Then give ONE short English hint (under 20 words) on how to hear/type it right next time.
+Return JSON {category, hint}.`;
+  try {
+    return await askGemini(prompt, { schema: gradeSchema, temperature: 0.2 });
+  } catch {
+    return { category: 'other', hint: `Listen for the whole sentence: ${target}` };
+  }
+}
+
+// ── Flow ──
+async function nextRound() {
+  answered = false;
+  _lastAudio = null;
+  current = null;
+  document.getElementById('input').value = '';
+  document.getElementById('input').disabled = false;
+  document.getElementById('result').textContent = '';
+  document.getElementById('result').className = 'result';
+  document.getElementById('diff').style.display = 'none';
+  document.getElementById('reveal').classList.remove('visible');
+  document.getElementById('coach-box').classList.remove('visible');
+  document.getElementById('coach-box').innerHTML = '';
+  document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('play-btn').disabled = true;
+  document.getElementById('slow-btn').disabled = true;
+  document.getElementById('submit-btn').disabled = true;
+
+  document.getElementById('play-btn').textContent = '⏳ Loading…';
+
+  current = await generateSentence();
+
+  document.getElementById('play-btn').textContent = '🔊 Play';
+  document.getElementById('play-btn').disabled = false;
+  document.getElementById('slow-btn').disabled = false;
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('input').focus();
+
+  // Auto-play
+  setTimeout(() => speak(current.ja, false), 300);
+
+  roundNum++;
+  document.getElementById('round-num').textContent = roundNum;
+}
+
+async function submit() {
+  if (answered || !current) return;
+  answered = true;
+  const user = document.getElementById('input').value.trim();
+  if (!user) return;
+  document.getElementById('input').disabled = true;
+  document.getElementById('submit-btn').disabled = true;
+
+  const nU = normalizeKana(user);
+  const nT = normalizeKana(current.reading);
+
+  const result = document.getElementById('result');
+  if (nU === nT) {
+    correctCount++;
+    result.textContent = '✓ Perfect!';
+    result.className = 'result ok';
+  } else {
+    result.textContent = '✗ Not quite';
+    result.className = 'result miss';
+    const diffEl = document.getElementById('diff');
+    diffEl.innerHTML = diffRender(user, current.reading);
+    diffEl.style.display = 'block';
+
+    const coach = document.getElementById('coach-box');
+    coach.classList.add('visible');
+    coach.innerHTML = '<div class="coach-label">COACH</div>Grading…';
+    const g = await gradeError(current.reading, nU);
+    errorCats[g.category] = (errorCats[g.category] || 0) + 1;
+    saveErrors();
+    coach.innerHTML = `<div class="coach-label">COACH <span class="category-chip">${escapeHtml(g.category)}</span></div>${escapeHtml(g.hint)}`;
+    document.getElementById('weak-cat').textContent = weakest();
+  }
+
+  document.getElementById('reveal-ja').textContent = current.ja;
+  document.getElementById('reveal-en').textContent = `${current.reading} — ${current.en}`;
+  document.getElementById('reveal').classList.add('visible');
+  document.getElementById('correct-num').textContent = correctCount;
+  document.getElementById('next-btn').style.display = 'inline-block';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('submit-btn').addEventListener('click', submit);
+document.getElementById('skip-btn').addEventListener('click', () => {
+  if (!current) return;
+  document.getElementById('reveal-ja').textContent = current.ja;
+  document.getElementById('reveal-en').textContent = `${current.reading} — ${current.en}`;
+  document.getElementById('reveal').classList.add('visible');
+  document.getElementById('next-btn').style.display = 'inline-block';
+  document.getElementById('input').disabled = true;
+  document.getElementById('submit-btn').disabled = true;
+  answered = true;
+});
+document.getElementById('next-btn').addEventListener('click', nextRound);
+document.getElementById('input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+});
+document.getElementById('stats-btn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const entries = Object.entries(errorCats).sort((a,b) => b[1] - a[1]);
+  if (!entries.length) { alert('No errors recorded yet.'); return; }
+  alert('Error categories:\n' + entries.map(([c, n]) => `  ${c}: ${n}`).join('\n'));
+});
+
+document.getElementById('weak-cat').textContent = weakest();
+nextRound();
+</script>
+
+<script>
+if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

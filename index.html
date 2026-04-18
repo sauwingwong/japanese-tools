@@ -52,6 +52,10 @@ main {
   border-color: #1a237e;
   box-shadow: 0 4px 20px rgba(26,35,126,0.15);
 }
+.tool-card.green:hover { border-color: #2e7d32; box-shadow: 0 4px 20px rgba(46,125,50,0.15); }
+.tool-card.purple:hover { border-color: #6a1b9a; box-shadow: 0 4px 20px rgba(106,27,154,0.15); }
+.tool-card.teal:hover { border-color: #00695c; box-shadow: 0 4px 20px rgba(0,105,92,0.15); }
+.tool-card.sky:hover { border-color: #0277bd; box-shadow: 0 4px 20px rgba(2,119,189,0.15); }
 .tool-card:active { transform: scale(0.985); transition: transform 90ms; }
 
 footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important; }
@@ -66,6 +70,10 @@ footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important; }
   color: #c62828;
 }
 .tool-card.blue .tool-title { color: #1a237e; }
+.tool-card.green .tool-title { color: #2e7d32; }
+.tool-card.purple .tool-title { color: #6a1b9a; }
+.tool-card.teal .tool-title { color: #00695c; }
+.tool-card.sky .tool-title { color: #0277bd; }
 .tool-desc { font-size: 0.88rem; color: #555; line-height: 1.6; }
 .tool-tags {
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;
@@ -75,6 +83,10 @@ footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important; }
   padding: 2px 10px; font-size: 0.72rem; font-weight: 500;
 }
 .tool-card.blue .tag { background: #e8eaf6; color: #1a237e; }
+.tool-card.green .tag { background: #e8f5e9; color: #2e7d32; }
+.tool-card.purple .tag { background: #f3e5f5; color: #6a1b9a; }
+.tool-card.teal .tag { background: #e0f2f1; color: #00695c; }
+.tool-card.sky .tag { background: #e1f5fe; color: #0277bd; }
 .tool-arrow {
   font-size: 1.4rem; color: #ccc; align-self: center; flex-shrink: 0;
 }
@@ -113,6 +125,62 @@ footer {
     <div class="tool-arrow">›</div>
   </a>
 
+  <a class="tool-card green" href="grammar.html">
+    <div class="tool-icon">🧠</div>
+    <div class="tool-body">
+      <div class="tool-title">AI Grammar Coach</div>
+      <div class="tool-desc">
+        N5 + N4 grammar patterns with three drill modes (form → meaning, meaning → form,
+        cloze). Gemini writes fresh example sentences on demand, and the wrong-answer
+        coach explains <em>why</em> you missed and gives a memory hook.
+      </div>
+      <div class="tool-tags">
+        <span class="tag">~230 N5/N4 Patterns</span>
+        <span class="tag">Cloze Drill</span>
+        <span class="tag">AI Coach 🤖</span>
+        <span class="tag">Persistent SRS</span>
+      </div>
+    </div>
+    <div class="tool-arrow">›</div>
+  </a>
+
+  <a class="tool-card purple" href="kanji.html">
+    <div class="tool-icon">🈁</div>
+    <div class="tool-body">
+      <div class="tool-title">Kanji Reading Drill</div>
+      <div class="tool-desc">
+        ~200 N5 + N4 kanji with three modes: kanji → reading, reading → kanji, and
+        in-context (Gemini generates a sentence, you pick the reading <em>in that
+        context</em> — trains on/kun switching).
+      </div>
+      <div class="tool-tags">
+        <span class="tag">N5/N4 Kanji</span>
+        <span class="tag">On/Kun Switching</span>
+        <span class="tag">AI Sentences 🤖</span>
+        <span class="tag">Persistent SRS</span>
+      </div>
+    </div>
+    <div class="tool-arrow">›</div>
+  </a>
+
+  <a class="tool-card teal" href="dictation.html">
+    <div class="tool-icon">✍️</div>
+    <div class="tool-body">
+      <div class="tool-title">Listening Dictation</div>
+      <div class="tool-desc">
+        Gemini generates a fresh N5 or N4 sentence → Gemini TTS reads it → you type
+        what you hear. AI grades your errors by category (particle / verb ending /
+        homophone / mora count) so you see your real weak spots.
+      </div>
+      <div class="tool-tags">
+        <span class="tag">Sentence-Level 聴解</span>
+        <span class="tag">Fresh Every Round</span>
+        <span class="tag">AI Error Grading 🤖</span>
+      </div>
+    </div>
+    <div class="tool-arrow">›</div>
+  </a>
+
   <a class="tool-card blue" href="listening-quiz.html">
     <div class="tool-icon">🎧</div>
     <div class="tool-body">
@@ -127,6 +195,24 @@ footer {
         <span class="tag">Spaced Repetition</span>
         <span class="tag">Pitch Accent</span>
         <span class="tag">Say it Aloud 🎤</span>
+      </div>
+    </div>
+    <div class="tool-arrow">›</div>
+  </a>
+
+  <a class="tool-card sky" href="study-plan.html">
+    <div class="tool-icon">📅</div>
+    <div class="tool-body">
+      <div class="tool-title">Study Plan</div>
+      <div class="tool-desc">
+        A 3–6 month schedule for passing N4 using the tools above — daily routine,
+        weekly rhythm, milestones by month, and guardrails. Refer back to it
+        whenever you're unsure what to work on.
+      </div>
+      <div class="tool-tags">
+        <span class="tag">6/3/1-Month Plans</span>
+        <span class="tag">Weekly Rhythm</span>
+        <span class="tag">Milestones</span>
       </div>
     </div>
     <div class="tool-arrow">›</div>

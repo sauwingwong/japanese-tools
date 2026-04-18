@@ -275,7 +275,8 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
 </div>
 
-<script>
+<script type="module">
+import { createSRS } from '/js/srs.js';
 // ═══════════════════════════════════════════════════════════════════════
 // VOCABULARY DATA  (hiragana, kanji, english, category, pitch pattern)
 // pitch: array of 0/1 per mora; null = unknown/skip display
@@ -530,7 +531,8 @@ function speak(text, rate) {
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
 let pool = [];           // current filtered pool
-let weights = {};        // word index → weight (higher = shown more)
+// Persistent SRS keyed by word.h (stable across category changes and reloads).
+const srs = createSRS('n5n4-vocab');
 let seenWords = new Set();
 let currentWord = null;
 let answered = false;
@@ -544,8 +546,6 @@ const SESSION_LENGTH = 20;
 function initPool(cat) {
   activeCat = cat;
   pool = cat === 'all' ? [...VOCAB] : VOCAB.filter(w => w.cat === cat);
-  weights = {};
-  pool.forEach((_, i) => { weights[i] = 1; });
   seenWords.clear();
   correct = 0; total = 0; streak = 0; wrongWords = [];
   updateScore();
@@ -555,14 +555,11 @@ function initPool(cat) {
 }
 
 function pickWord() {
-  // Weighted random
-  const totalWeight = pool.reduce((s, _, i) => s + (weights[i] || 1), 0);
-  let r = Math.random() * totalWeight;
-  for (let i = 0; i < pool.length; i++) {
-    r -= (weights[i] || 1);
-    if (r <= 0) return i;
-  }
-  return pool.length - 1;
+  // Weighted random via shared SRS module (keyed by word.h).
+  const ids = pool.map(w => w.h);
+  const pickedId = srs.pickNext(ids);
+  const idx = pool.findIndex(w => w.h === pickedId);
+  return idx >= 0 ? idx : 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -613,13 +610,13 @@ function answerQuestion(btn, isCorrect, chosen) {
   if (isCorrect) {
     correct++;
     streak++;
-    weights[currentWord.idx] = Math.max(0.5, (weights[currentWord.idx] || 1) * 0.6);
+    srs.recordResult(currentWord.word.h, true);
     btn.classList.add('correct');
     document.getElementById('feedback-text').textContent = '✓ Correct!';
     document.getElementById('feedback-text').style.color = '#2e7d32';
   } else {
     streak = 0;
-    weights[currentWord.idx] = (weights[currentWord.idx] || 1) + 2.5;
+    srs.recordResult(currentWord.word.h, false);
     btn.classList.add('wrong');
     wrongWords.push({ word, yourAnswer: chosen });
     // Highlight correct

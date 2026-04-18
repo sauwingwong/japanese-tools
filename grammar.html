@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Grammar Coach — N5/N4</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2e7d32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Grammar">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overscroll-behavior-y: contain; }
+body {
+  font-family: 'Hiragino Sans','Hiragino Kaku Gothic ProN',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f4f4f4; color:#222; min-height:100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+header {
+  background:#2e7d32; color:white; padding:16px 20px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  display:flex; justify-content:space-between; align-items:center;
+}
+header h1 { font-size:1.1rem; font-weight:600; }
+header a { color:#fff; text-decoration:none; font-size:0.85rem; opacity:0.9; }
+main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+.filter-bar { display:flex; gap:8px; margin-bottom:14px; justify-content:center; }
+.filter-bar button {
+  background:#fff; border:1.5px solid #ddd; border-radius:18px;
+  padding:6px 16px; font-size:0.85rem; font-weight:500; cursor:pointer; color:#555;
+}
+.filter-bar button.active { background:#2e7d32; color:#fff; border-color:#2e7d32; }
+
+.mode-bar { display:flex; gap:8px; margin-bottom:14px; justify-content:center; flex-wrap:wrap; }
+.mode-bar button {
+  background:#fff; border:1px solid #ddd; border-radius:6px;
+  padding:6px 12px; font-size:0.78rem; cursor:pointer;
+}
+.mode-bar button.active { background:#e8f5e9; border-color:#2e7d32; color:#2e7d32; font-weight:600; }
+
+.card { background:#fff; border-radius:14px; padding:20px; box-shadow:0 2px 10px rgba(0,0,0,0.06); margin-bottom:14px; }
+
+.pattern-display { font-size:1.6rem; font-weight:600; color:#2e7d32; text-align:center; margin-bottom:8px; }
+.pattern-form { font-size:0.82rem; color:#888; text-align:center; margin-bottom:4px; }
+.level-tag { display:inline-block; background:#e8f5e9; color:#2e7d32; font-size:0.65rem; font-weight:600; padding:2px 8px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+
+.prompt-text { font-size:1.1rem; text-align:center; margin:14px 0; color:#333; line-height:1.5; }
+
+#options-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+@media(max-width:420px){ #options-grid{grid-template-columns:1fr;} }
+.opt {
+  background:#fff; border:2px solid #ddd; border-radius:10px;
+  padding:14px 12px; font-size:0.95rem; cursor:pointer;
+  text-align:left; transition:all 0.12s; font-family:inherit; color:#222;
+}
+.opt:active { transform: scale(0.98); }
+.opt:hover:not(:disabled) { border-color:#2e7d32; background:#f1f8e9; }
+.opt.correct { border-color:#2e7d32; background:#e8f5e9; color:#2e7d32; font-weight:600; }
+.opt.wrong { border-color:#c62828; background:#ffebee; color:#c62828; font-weight:600; }
+.opt:disabled { cursor:default; }
+.opt-meaning { display:block; font-size:0.72rem; color:#888; margin-top:4px; }
+
+#feedback { margin-top:12px; text-align:center; font-size:0.95rem; min-height:22px; font-weight:500; }
+#feedback.correct { color:#2e7d32; }
+#feedback.wrong { color:#c62828; }
+
+#coach-box { display:none; background:#fff3e0; border-left:3px solid #ef6c00; padding:12px 14px; border-radius:8px; margin-top:12px; font-size:0.88rem; line-height:1.55; color:#5d4037; }
+#coach-box.visible { display:block; }
+#coach-box .coach-label { font-weight:600; color:#ef6c00; margin-bottom:4px; font-size:0.75rem; letter-spacing:0.02em; }
+#coach-box.loading { color:#888; font-style:italic; }
+
+.example { margin-top:14px; background:#f8f8f8; border-radius:8px; padding:12px; display:none; }
+.example.visible { display:block; }
+.example .ex-ja { font-size:1.05rem; margin-bottom:4px; }
+.example .ex-en { font-size:0.82rem; color:#666; }
+.example button {
+  background:#2e7d32; color:#fff; border:none; border-radius:6px;
+  padding:6px 12px; font-size:0.78rem; cursor:pointer; margin-top:8px;
+}
+
+.controls { display:flex; gap:10px; justify-content:center; margin-top:14px; }
+.controls button {
+  background:#2e7d32; color:#fff; border:none; border-radius:8px;
+  padding:10px 24px; font-size:0.95rem; font-weight:600; cursor:pointer;
+}
+.controls button.secondary { background:#fff; color:#2e7d32; border:1.5px solid #2e7d32; }
+
+.score-bar { display:flex; justify-content:space-between; padding:6px 0; font-size:0.85rem; color:#666; }
+.score-bar strong { color:#2e7d32; }
+
+.tabbar-mobile {
+  display:none; position:fixed; bottom:0; left:0; right:0; z-index:50;
+  background:rgba(255,255,255,0.92); backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  border-top:1px solid rgba(0,0,0,0.08);
+  padding-bottom: env(safe-area-inset-bottom);
+  grid-template-columns: repeat(4, 1fr);
+  font-size:0.68rem;
+}
+@media(max-width:600px){ .tabbar-mobile { display:grid; } }
+.tabi { background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 0 6px; color:#666; text-decoration:none; font:inherit; font-size:0.65rem; cursor:pointer; }
+.tabi-ico { font-size:1.3rem; line-height:1; }
+.tabi.active { color:#2e7d32; font-weight:600; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/">‹ Home</a>
+  <h1>🧠 Grammar Coach</h1>
+  <a href="#" id="reset-btn" title="Reset SRS">↺</a>
+</header>
+
+<main>
+  <div class="filter-bar" id="filter-bar">
+    <button data-level="all" class="active">All</button>
+    <button data-level="N5">N5</button>
+    <button data-level="N4">N4</button>
+  </div>
+
+  <div class="mode-bar" id="mode-bar">
+    <button data-mode="form-to-meaning" class="active">Form → Meaning</button>
+    <button data-mode="meaning-to-form">Meaning → Form</button>
+    <button data-mode="cloze">Cloze (Sentence)</button>
+  </div>
+
+  <div class="card">
+    <div class="score-bar">
+      <span>Known <strong id="stat-known">0</strong> · Learning <strong id="stat-learning">0</strong> · Struggling <strong id="stat-struggling">0</strong></span>
+      <span>Score <strong id="score">0 / 0</strong></span>
+    </div>
+
+    <div id="question-area">
+      <div class="pattern-display" id="pattern-ja">—</div>
+      <div class="pattern-form" id="pattern-form"></div>
+      <div class="prompt-text" id="prompt-text"></div>
+      <div id="options-grid"></div>
+      <div id="feedback"></div>
+      <div id="coach-box"></div>
+      <div class="example" id="example">
+        <div class="ex-ja" id="ex-ja"></div>
+        <div class="ex-en" id="ex-en"></div>
+        <button id="ex-speak">🔊 Play</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="next-btn" style="display:none">Next →</button>
+    </div>
+  </div>
+</main>
+
+<nav class="tabbar-mobile">
+  <a class="tabi" href="/"><span class="tabi-ico">🏠</span>Home</a>
+  <a class="tabi" href="/phoneme-trainer.html"><span class="tabi-ico">🗣️</span>Phoneme</a>
+  <a class="tabi active" href="/grammar.html"><span class="tabi-ico">🧠</span>Grammar</a>
+  <a class="tabi" href="/listening-quiz.html"><span class="tabi-ico">🎧</span>Listen</a>
+</nav>
+
+<script type="module">
+import { createSRS } from '/js/srs.js';
+import { askGemini } from '/js/gemini.js';
+
+// ── Load seed ──
+const data = await fetch('/data/grammar-n5n4.json').then(r => r.json());
+const ALL_PATTERNS = data.patterns;
+
+const srs = createSRS('n5n4-grammar');
+
+let level = localStorage.getItem('grammar-level') || 'all';
+let mode = localStorage.getItem('grammar-mode') || 'form-to-meaning';
+let current = null;
+let answered = false;
+let correct = 0, total = 0;
+
+function poolForLevel() {
+  return level === 'all' ? ALL_PATTERNS : ALL_PATTERNS.filter(p => p.level === level);
+}
+
+// ── Filter / mode bars ──
+function applyLevel() {
+  document.querySelectorAll('#filter-bar button').forEach(b => {
+    b.classList.toggle('active', b.dataset.level === level);
+  });
+  localStorage.setItem('grammar-level', level);
+  updateStats();
+  next();
+}
+function applyMode() {
+  document.querySelectorAll('#mode-bar button').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  localStorage.setItem('grammar-mode', mode);
+  next();
+}
+document.querySelectorAll('#filter-bar button').forEach(b => {
+  b.addEventListener('click', () => { level = b.dataset.level; applyLevel(); });
+});
+document.querySelectorAll('#mode-bar button').forEach(b => {
+  b.addEventListener('click', () => { mode = b.dataset.mode; applyMode(); });
+});
+
+// ── Stats ──
+function updateStats() {
+  const ids = poolForLevel().map(p => p.id);
+  const s = srs.stats(ids);
+  document.getElementById('stat-known').textContent = s.known;
+  document.getElementById('stat-learning').textContent = s.learning;
+  document.getElementById('stat-struggling').textContent = s.struggling;
+}
+
+// ── Reset ──
+document.getElementById('reset-btn').addEventListener('click', (e) => {
+  e.preventDefault();
+  if (confirm('Reset grammar SRS progress?')) { srs.reset(); updateStats(); next(); }
+});
+
+// ── Example sentences via Gemini (cached) ──
+const exampleSchema = {
+  type: 'object',
+  properties: {
+    sentences: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          ja: { type: 'string' },
+          en: { type: 'string' }
+        },
+        required: ['ja','en']
+      }
+    }
+  },
+  required: ['sentences']
+};
+
+async function getExamples(pattern) {
+  const prompt = `Write 3 short ${pattern.level}-level Japanese sentences using the grammar pattern "${pattern.pattern}" (meaning: ${pattern.meaning_en}). Use simple JLPT ${pattern.level} vocabulary. Return JSON {sentences: [{ja, en}, ...]}.`;
+  try {
+    return await askGemini(prompt, {
+      schema: exampleSchema,
+      cacheKey: 'grammar/' + pattern.id,
+      ttlDays: 30
+    });
+  } catch (e) {
+    console.warn('Example fetch failed:', e);
+    return { sentences: [] };
+  }
+}
+
+// ── Coach (wrong-answer explanation) ──
+async function getCoach(pattern, wrongPick) {
+  const prompt = `A Japanese learner (JLPT ${pattern.level}) was asked about the grammar pattern "${pattern.pattern}" (correct meaning: "${pattern.meaning_en}"). They picked the wrong answer: "${wrongPick}". In 2-3 short English sentences, explain why that is wrong and give a tiny memory hook. Plain prose, no markdown.`;
+  try {
+    const text = await askGemini(prompt, { temperature: 0.4 });
+    return text;
+  } catch (e) {
+    return `The correct meaning is "${pattern.meaning_en}". Your pick was "${wrongPick}" — review the form "${pattern.form}".`;
+  }
+}
+
+// ── Speech (delegate to phoneme-trainer's pattern: use Gemini TTS via /api/tts) ──
+let _audioCtx = null;
+async function speak(text) {
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) return;
+    const { audio } = await res.json();
+    const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state !== 'running') await _audioCtx.resume();
+    const pcm = new Int16Array(bytes.buffer);
+    const buf = _audioCtx.createBuffer(1, pcm.length, 24000);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(_audioCtx.destination); src.start();
+  } catch (e) { console.warn('TTS failed:', e); }
+}
+
+// ── Question generation ──
+function pickDistractors(correctPattern, n, byField) {
+  const others = ALL_PATTERNS.filter(p => p.id !== correctPattern.id);
+  const shuffled = others.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, n).map(p => p[byField]);
+}
+
+async function next() {
+  answered = false;
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = '';
+  document.getElementById('coach-box').classList.remove('visible', 'loading');
+  document.getElementById('coach-box').innerHTML = '';
+  document.getElementById('example').classList.remove('visible');
+  document.getElementById('next-btn').style.display = 'none';
+
+  const pool = poolForLevel();
+  if (!pool.length) return;
+  const id = srs.pickNext(pool.map(p => p.id), { avoidIds: current ? [current.id] : [] });
+  current = pool.find(p => p.id === id);
+
+  const patternDisplay = document.getElementById('pattern-ja');
+  const patternForm = document.getElementById('pattern-form');
+  const promptText = document.getElementById('prompt-text');
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+
+  const levelBadge = `<span class="level-tag">${current.level}</span>`;
+
+  if (mode === 'form-to-meaning') {
+    patternDisplay.innerHTML = current.pattern + levelBadge;
+    patternForm.textContent = current.form;
+    promptText.textContent = 'What does this pattern mean?';
+    const opts = [
+      { label: current.meaning_en, correct: true },
+      ...pickDistractors(current, 3, 'meaning_en').map(m => ({ label: m, correct: false }))
+    ].sort(() => Math.random() - 0.5);
+    renderOpts(opts);
+  } else if (mode === 'meaning-to-form') {
+    patternDisplay.innerHTML = '“' + current.meaning_en + '”' + levelBadge;
+    patternForm.textContent = '';
+    promptText.textContent = 'Which pattern matches?';
+    const opts = [
+      { label: current.pattern, correct: true },
+      ...pickDistractors(current, 3, 'pattern').map(p => ({ label: p, correct: false }))
+    ].sort(() => Math.random() - 0.5);
+    renderOpts(opts);
+  } else {
+    // Cloze: generate sentence with pattern, remove pattern core, ask to fill in
+    patternDisplay.innerHTML = 'Cloze' + levelBadge;
+    patternForm.textContent = current.meaning_en;
+    promptText.textContent = 'Loading sentence…';
+    const ex = await getExamples(current);
+    const s = ex.sentences && ex.sentences[0];
+    if (s) {
+      // Simplistic cloze: show sentence with pattern core replaced by ___ and options are pattern vs distractors
+      const blanked = s.ja.replace(current.pattern.replace(/〜/g, ''), '___');
+      promptText.innerHTML = blanked + '<div style="font-size:0.8rem;color:#888;margin-top:6px;">' + s.en + '</div>';
+    } else {
+      promptText.textContent = 'Pick the pattern for: ' + current.meaning_en;
+    }
+    const opts = [
+      { label: current.pattern, correct: true },
+      ...pickDistractors(current, 3, 'pattern').map(p => ({ label: p, correct: false }))
+    ].sort(() => Math.random() - 0.5);
+    renderOpts(opts);
+  }
+}
+
+function renderOpts(opts) {
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  opts.forEach(o => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.textContent = o.label;
+    btn.addEventListener('click', () => handleAnswer(o, btn));
+    grid.appendChild(btn);
+  });
+}
+
+async function handleAnswer(pick, btn) {
+  if (answered) return;
+  answered = true;
+  total++;
+  const fb = document.getElementById('feedback');
+
+  if (pick.correct) {
+    correct++;
+    srs.recordResult(current.id, true);
+    btn.classList.add('correct');
+    fb.textContent = '✓ Correct!';
+    fb.className = 'correct';
+  } else {
+    srs.recordResult(current.id, false);
+    btn.classList.add('wrong');
+    // Find button whose text matches correct answer and reveal it.
+    const correctOpt = [...document.querySelectorAll('.opt')].find(b => {
+      return b.textContent === (mode === 'form-to-meaning' ? current.meaning_en : current.pattern);
+    });
+    if (correctOpt) correctOpt.classList.add('correct');
+    fb.textContent = '✗ Not quite — see coach below';
+    fb.className = 'wrong';
+
+    // Fire coach
+    const coach = document.getElementById('coach-box');
+    coach.classList.add('visible', 'loading');
+    coach.innerHTML = '<div class="coach-label">COACH</div>Thinking…';
+    const explanation = await getCoach(current, pick.label);
+    coach.classList.remove('loading');
+    coach.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(explanation);
+  }
+
+  document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  document.getElementById('score').textContent = `${correct} / ${total}`;
+  updateStats();
+
+  // Example sentence
+  const ex = await getExamples(current);
+  const s = ex.sentences && ex.sentences[0];
+  if (s) {
+    document.getElementById('ex-ja').textContent = s.ja;
+    document.getElementById('ex-en').textContent = s.en;
+    document.getElementById('example').classList.add('visible');
+    document.getElementById('ex-speak').onclick = () => speak(s.ja);
+  }
+
+  document.getElementById('next-btn').style.display = 'inline-block';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('next-btn').addEventListener('click', next);
+
+// Boot
+applyLevel();
+applyMode();
+</script>
+
+<script>
+if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
