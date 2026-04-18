@@ -6,13 +6,16 @@
 // and Safari shows "cannot open this page".
 //
 // Strategy:
-//   - Precache only static non-HTML assets (icons, manifest).
+//   - Precache only static non-HTML assets (icons, manifest, JSON data).
 //   - Navigations + HTML: always network (passthrough).
-//   - Other same-origin GETs (PNG/CSS/JS if any): cache-first after first hit.
+//   - /data/*.json: NETWORK-FIRST with cache fallback — JSON content churns
+//     (vocab/grammar/kanji expansions), so we want the latest on every load
+//     when online, and still work offline via the cached copy.
+//   - Other same-origin GETs (icons, JS, CSS): cache-first after first hit.
 //   - /api/*: passthrough.
 //
 // Bump CACHE version to invalidate previously cached assets on deploy.
-const CACHE = 'japanese-v5';
+const CACHE = 'japanese-v6';
 const PRECACHE = [
   '/manifest.webmanifest',
   '/icon-192.png',
@@ -59,7 +62,22 @@ self.addEventListener('fetch', e => {
   // Only handle same-origin GETs.
   if (req.method !== 'GET' || url.origin !== location.origin) return;
 
-  // Cache-first for static assets (icons, manifest, future css/js).
+  // Network-first for JSON data so vocab/grammar/kanji updates propagate
+  // without needing a cache-version bump. Falls back to cache when offline.
+  if (url.pathname.startsWith('/data/') && url.pathname.endsWith('.json')) {
+    e.respondWith(
+      fetch(req).then(resp => {
+        if (resp && resp.ok && resp.type === 'basic') {
+          const copy = resp.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+        }
+        return resp;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Cache-first for static assets (icons, manifest, JS, CSS).
   e.respondWith(
     caches.match(req).then(hit =>
       hit || fetch(req).then(resp => {

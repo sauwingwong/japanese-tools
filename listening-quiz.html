@@ -738,7 +738,7 @@ document.getElementById('filter-bar').addEventListener('click', e => {
 // ── Bootstrap: load vocab JSON, then start. ──
 async function bootstrap() {
   try {
-    const res = await fetch('/data/vocab-n5n4.json', { cache: 'force-cache' });
+    const res = await fetch('/data/vocab-n5n4.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     VOCAB = await res.json();
   } catch (e) {
