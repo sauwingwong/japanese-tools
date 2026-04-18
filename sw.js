@@ -12,7 +12,7 @@
 //   - /api/*: passthrough.
 //
 // Bump CACHE version to invalidate previously cached assets on deploy.
-const CACHE = 'japanese-v4';
+const CACHE = 'japanese-v5';
 const PRECACHE = [
   '/manifest.webmanifest',
   '/icon-192.png',
