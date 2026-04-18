@@ -1,12 +1,19 @@
 // Service worker for Japanese Learning Tools
-// Cache-first for static assets; network passthrough for /api/ (TTS/STT).
-// Bump CACHE version to invalidate old cached HTML/CSS/JS on deploy.
-const CACHE = 'japanese-v1';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/phoneme-trainer.html',
-  '/listening-quiz.html',
+//
+// The site sits behind Cloudflare Access (Google SSO), so HTML responses can
+// be short-lived auth redirects. We must NOT cache HTML or navigation
+// responses — otherwise a cached login-redirect is served on later visits
+// and Safari shows "cannot open this page".
+//
+// Strategy:
+//   - Precache only static non-HTML assets (icons, manifest).
+//   - Navigations + HTML: always network (passthrough).
+//   - Other same-origin GETs (PNG/CSS/JS if any): cache-first after first hit.
+//   - /api/*: passthrough.
+//
+// Bump CACHE version to invalidate previously cached assets on deploy.
+const CACHE = 'japanese-v2';
+const PRECACHE = [
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
@@ -16,8 +23,9 @@ const ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(ASSETS))
+      .then(c => c.addAll(PRECACHE))
       .then(() => self.skipWaiting())
+      .catch(err => { /* precache is best-effort; don't block install */ })
   );
 });
 
@@ -30,17 +38,28 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  // Never intercept API calls (TTS/STT) — always hit network.
+  const req = e.request;
+  const url = new URL(req.url);
+
+  // Never intercept navigations or HTML — passthrough to network so
+  // Cloudflare Access can do its auth dance normally.
+  if (req.mode === 'navigate') return;
+  const accept = req.headers.get('accept') || '';
+  if (accept.includes('text/html')) return;
+
+  // Never intercept API calls.
   if (url.pathname.startsWith('/api/')) return;
+
   // Only handle same-origin GETs.
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
+
+  // Cache-first for static assets (icons, manifest, future css/js).
   e.respondWith(
-    caches.match(e.request).then(hit =>
-      hit || fetch(e.request).then(resp => {
-        if (resp && resp.ok) {
+    caches.match(req).then(hit =>
+      hit || fetch(req).then(resp => {
+        if (resp && resp.ok && resp.type === 'basic') {
           const copy = resp.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
+          caches.open(CACHE).then(c => c.put(req, copy));
         }
         return resp;
       }).catch(() => hit)
