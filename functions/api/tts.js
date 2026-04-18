@@ -38,21 +38,43 @@ export async function onRequestPost(context) {
   const chosenModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent`;
 
-  const geminiRes = await fetch(`${endpoint}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text }] }],
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: VOICE }
+  // Both 2.5 and 3.1 TTS models hang (→ Cloudflare edge 502) on very short input
+  // like a single kana. Pad to give the model enough context to synthesise quickly.
+  // The trailing period adds ~a comma-length pause without altering the kana sound.
+  const ttsText = text.trim().length <= 2 ? `${text}。` : text;
+
+  // Abort the upstream call if Gemini hangs, so we return control to the client
+  // with a clean JSON error instead of getting killed by Cloudflare's edge timeout.
+  const upstreamAbort = new AbortController();
+  const upstreamTimer = setTimeout(() => upstreamAbort.abort(), 20000);
+
+  let geminiRes;
+  try {
+    geminiRes = await fetch(`${endpoint}?key=${apiKey}`, {
+      method: 'POST',
+      signal: upstreamAbort.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: ttsText }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: VOICE }
+            }
           }
         }
-      }
-    })
-  });
+      })
+    });
+  } catch (e) {
+    clearTimeout(upstreamTimer);
+    const aborted = e.name === 'AbortError';
+    return Response.json(
+      { error: aborted ? 'Gemini upstream timed out' : `Gemini upstream error: ${e.message}` },
+      { status: 504, headers: { 'Access-Control-Allow-Origin': '*' } }
+    );
+  }
+  clearTimeout(upstreamTimer);
 
   if (!geminiRes.ok) {
     const err = await geminiRes.text();
