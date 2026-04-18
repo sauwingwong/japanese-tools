@@ -23,203 +23,110 @@ body {
 a { -webkit-tap-highlight-color: transparent; }
 header {
   background: #c62828; color: white;
-  padding: 20px 24px; padding-top: calc(20px + env(safe-area-inset-top));
-  text-align: center;
+  padding: 14px 20px; padding-top: calc(14px + env(safe-area-inset-top));
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.01em; }
-header p { font-size: 0.9rem; opacity: 0.85; margin-top: 6px; }
+header .title-wrap { text-align: left; }
+header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.01em; }
+header p { font-size: 0.72rem; opacity: 0.85; margin-top: 2px; }
+header .plan-link {
+  color: #fff; text-decoration: none;
+  background: rgba(255,255,255,0.15); padding: 6px 12px; border-radius: 16px;
+  font-size: 0.78rem; font-weight: 500; white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+header .plan-link:hover { background: rgba(255,255,255,0.25); }
 
 main {
-  max-width: 720px; margin: 40px auto; padding: 0 16px;
-  display: flex; flex-direction: column; gap: 20px; flex: 1;
+  max-width: 960px; margin: 20px auto; padding: 0 14px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; flex: 1;
+  align-content: start;
+}
+@media (max-width: 720px) {
+  main { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 0 10px; margin: 12px auto; }
 }
 
 .tool-card {
-  background: white; border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  padding: 28px 28px 22px;
-  display: flex; align-items: flex-start; gap: 20px;
+  background: white; border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+  padding: 18px 14px 16px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 6px;
   text-decoration: none; color: inherit;
-  border: 2px solid transparent;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  border-left: 4px solid #c62828;
+  transition: box-shadow 0.15s, transform 0.1s;
+  min-height: 118px;
 }
-.tool-card:hover {
-  border-color: #c62828;
-  box-shadow: 0 4px 20px rgba(198,40,40,0.15);
-  transform: translateY(-2px);
-}
-.tool-card.blue:hover {
-  border-color: #1a237e;
-  box-shadow: 0 4px 20px rgba(26,35,126,0.15);
-}
-.tool-card.green:hover { border-color: #2e7d32; box-shadow: 0 4px 20px rgba(46,125,50,0.15); }
-.tool-card.purple:hover { border-color: #6a1b9a; box-shadow: 0 4px 20px rgba(106,27,154,0.15); }
-.tool-card.teal:hover { border-color: #00695c; box-shadow: 0 4px 20px rgba(0,105,92,0.15); }
-.tool-card.sky:hover { border-color: #0277bd; box-shadow: 0 4px 20px rgba(2,119,189,0.15); }
-.tool-card:active { transform: scale(0.985); transition: transform 90ms; }
+.tool-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.12); transform: translateY(-2px); }
+.tool-card:active { transform: scale(0.97); transition: transform 90ms; }
 
-footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important; }
+.tool-card.blue   { border-left-color: #1a237e; }
+.tool-card.green  { border-left-color: #2e7d32; }
+.tool-card.purple { border-left-color: #6a1b9a; }
+.tool-card.teal   { border-left-color: #00695c; }
+.tool-card.sky    { border-left-color: #0277bd; }
 
-.tool-icon {
-  font-size: 2.8rem; line-height: 1; flex-shrink: 0;
-  width: 56px; text-align: center;
-}
-.tool-body { flex: 1; }
+.tool-icon { font-size: 2rem; line-height: 1; margin-bottom: 2px; }
 .tool-title {
-  font-size: 1.2rem; font-weight: 700; margin-bottom: 6px;
-  color: #c62828;
+  font-size: 0.92rem; font-weight: 700; color: #c62828; line-height: 1.25;
 }
-.tool-card.blue .tool-title { color: #1a237e; }
-.tool-card.green .tool-title { color: #2e7d32; }
+.tool-card.blue   .tool-title { color: #1a237e; }
+.tool-card.green  .tool-title { color: #2e7d32; }
 .tool-card.purple .tool-title { color: #6a1b9a; }
-.tool-card.teal .tool-title { color: #00695c; }
-.tool-card.sky .tool-title { color: #0277bd; }
-.tool-desc { font-size: 0.88rem; color: #555; line-height: 1.6; }
-.tool-tags {
-  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;
-}
-.tag {
-  background: #ffebee; color: #c62828; border-radius: 10px;
-  padding: 2px 10px; font-size: 0.72rem; font-weight: 500;
-}
-.tool-card.blue .tag { background: #e8eaf6; color: #1a237e; }
-.tool-card.green .tag { background: #e8f5e9; color: #2e7d32; }
-.tool-card.purple .tag { background: #f3e5f5; color: #6a1b9a; }
-.tool-card.teal .tag { background: #e0f2f1; color: #00695c; }
-.tool-card.sky .tag { background: #e1f5fe; color: #0277bd; }
-.tool-arrow {
-  font-size: 1.4rem; color: #ccc; align-self: center; flex-shrink: 0;
-}
+.tool-card.teal   .tool-title { color: #00695c; }
+.tool-card.sky    .tool-title { color: #0277bd; }
+.tool-tagline { font-size: 0.72rem; color: #777; line-height: 1.35; }
 
 footer {
-  text-align: center; padding: 20px; font-size: 0.75rem; color: #aaa;
+  text-align: center; padding: 14px 20px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  font-size: 0.7rem; color: #aaa;
 }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>🎌 Japanese Learning Tools</h1>
-  <p>Pronunciation drills, pitch accent, and listening practice — N5 / N4</p>
+  <div class="title-wrap">
+    <h1>🎌 Japanese Learning Tools</h1>
+    <p>N5 / N4 — pronunciation, grammar, kanji, listening</p>
+  </div>
+  <a class="plan-link" href="study-plan.html">📅 Plan</a>
 </header>
 
 <main>
   <a class="tool-card" href="phoneme-trainer.html">
     <div class="tool-icon">🗣️</div>
-    <div class="tool-body">
-      <div class="tool-title">Japanese Phoneme Trainer</div>
-      <div class="tool-desc">
-        Full hiragana &amp; katakana sound chart with audio playback. Drills for the
-        trickiest sounds: long vowels, double consonants (っ), ら行 R-sounds, and pitch
-        accent. Includes a shadowing drill with speech recognition.
-      </div>
-      <div class="tool-tags">
-        <span class="tag">Sound Chart</span>
-        <span class="tag">Long Vowels</span>
-        <span class="tag">Double っ</span>
-        <span class="tag">ら行 R-Sounds</span>
-        <span class="tag">Pitch Accent</span>
-        <span class="tag">Shadowing 🎤</span>
-      </div>
-    </div>
-    <div class="tool-arrow">›</div>
+    <div class="tool-title">Phoneme Trainer</div>
+    <div class="tool-tagline">Sound chart · pitch · shadowing</div>
   </a>
 
   <a class="tool-card green" href="grammar.html">
     <div class="tool-icon">🧠</div>
-    <div class="tool-body">
-      <div class="tool-title">AI Grammar Coach</div>
-      <div class="tool-desc">
-        N5 + N4 grammar patterns with three drill modes (form → meaning, meaning → form,
-        cloze). Gemini writes fresh example sentences on demand, and the wrong-answer
-        coach explains <em>why</em> you missed and gives a memory hook.
-      </div>
-      <div class="tool-tags">
-        <span class="tag">~230 N5/N4 Patterns</span>
-        <span class="tag">Cloze Drill</span>
-        <span class="tag">AI Coach 🤖</span>
-        <span class="tag">Persistent SRS</span>
-      </div>
-    </div>
-    <div class="tool-arrow">›</div>
+    <div class="tool-title">Grammar Coach</div>
+    <div class="tool-tagline">N5/N4 patterns · AI coach</div>
   </a>
 
   <a class="tool-card purple" href="kanji.html">
     <div class="tool-icon">🈁</div>
-    <div class="tool-body">
-      <div class="tool-title">Kanji Reading Drill</div>
-      <div class="tool-desc">
-        ~200 N5 + N4 kanji with three modes: kanji → reading, reading → kanji, and
-        in-context (Gemini generates a sentence, you pick the reading <em>in that
-        context</em> — trains on/kun switching).
-      </div>
-      <div class="tool-tags">
-        <span class="tag">N5/N4 Kanji</span>
-        <span class="tag">On/Kun Switching</span>
-        <span class="tag">AI Sentences 🤖</span>
-        <span class="tag">Persistent SRS</span>
-      </div>
-    </div>
-    <div class="tool-arrow">›</div>
+    <div class="tool-title">Kanji Reading</div>
+    <div class="tool-tagline">On/kun · in-context</div>
   </a>
 
   <a class="tool-card teal" href="dictation.html">
     <div class="tool-icon">✍️</div>
-    <div class="tool-body">
-      <div class="tool-title">Listening Dictation</div>
-      <div class="tool-desc">
-        Gemini generates a fresh N5 or N4 sentence → Gemini TTS reads it → you type
-        what you hear. AI grades your errors by category (particle / verb ending /
-        homophone / mora count) so you see your real weak spots.
-      </div>
-      <div class="tool-tags">
-        <span class="tag">Sentence-Level 聴解</span>
-        <span class="tag">Fresh Every Round</span>
-        <span class="tag">AI Error Grading 🤖</span>
-      </div>
-    </div>
-    <div class="tool-arrow">›</div>
+    <div class="tool-title">Dictation</div>
+    <div class="tool-tagline">Type what you hear · AI grading</div>
   </a>
 
   <a class="tool-card blue" href="listening-quiz.html">
     <div class="tool-icon">🎧</div>
-    <div class="tool-body">
-      <div class="tool-title">Japanese Listening Quiz</div>
-      <div class="tool-desc">
-        Spaced-repetition listening quiz with 114 N5/N4 vocabulary words. Hear a word,
-        choose the correct hiragana from four options. Wrong answers come back more often.
-        Includes pitch accent display and a pronunciation check.
-      </div>
-      <div class="tool-tags">
-        <span class="tag">114 N5/N4 Words</span>
-        <span class="tag">Spaced Repetition</span>
-        <span class="tag">Pitch Accent</span>
-        <span class="tag">Say it Aloud 🎤</span>
-      </div>
-    </div>
-    <div class="tool-arrow">›</div>
-  </a>
-
-  <a class="tool-card sky" href="study-plan.html">
-    <div class="tool-icon">📅</div>
-    <div class="tool-body">
-      <div class="tool-title">Study Plan</div>
-      <div class="tool-desc">
-        A 3–6 month schedule for passing N4 using the tools above — daily routine,
-        weekly rhythm, milestones by month, and guardrails. Refer back to it
-        whenever you're unsure what to work on.
-      </div>
-      <div class="tool-tags">
-        <span class="tag">6/3/1-Month Plans</span>
-        <span class="tag">Weekly Rhythm</span>
-        <span class="tag">Milestones</span>
-      </div>
-    </div>
-    <div class="tool-arrow">›</div>
+    <div class="tool-title">Listening Quiz</div>
+    <div class="tool-tagline">114 words · say it aloud</div>
   </a>
 </main>
 
-<footer>Powered by Gemini TTS · Built for personal Japanese study</footer>
+<footer>Powered by Gemini · Built for personal Japanese study</footer>
 
 <script>
 if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
