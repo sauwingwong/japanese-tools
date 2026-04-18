@@ -495,14 +495,6 @@ function _unlockOnGesture() {
     src.buffer = buf;
     src.connect(ctx.destination);
     src.start(0);
-    // Also prime Web Speech — iOS needs an in-gesture speak() to unlock it.
-    if ('speechSynthesis' in window) {
-      try {
-        const u = new SpeechSynthesisUtterance('');
-        u.volume = 0;
-        speechSynthesis.speak(u);
-      } catch(e) {}
-    }
     _ctxUnlocked = true;
   } catch(e) {}
 }
@@ -566,14 +558,23 @@ async function speakGemini(text, opts) {
 
 // ── Web Speech (local) ──
 function speakWebSpeech(text, rate) {
-  speechSynthesis.cancel();
   return new Promise(resolve => {
+    const synth = window.speechSynthesis;
+    // iOS quirk: calling cancel() then speak() synchronously in the same tick
+    // leaves the engine in a 'speaking' state that blocks subsequent utterances
+    // from ever firing onend. Only cancel if we actually need to.
+    if (synth.speaking || synth.pending) {
+      try { synth.cancel(); } catch(e) {}
+    }
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang = 'ja-JP';
     if (jaVoice) utt.voice = jaVoice;
     utt.rate = rate || 0.9;
     utt.onend = resolve;
-    speechSynthesis.speak(utt);
+    utt.onerror = resolve;
+    // iOS sometimes pauses synth silently between utterances; resume before speak.
+    try { synth.resume(); } catch(e) {}
+    synth.speak(utt);
   });
 }
 
