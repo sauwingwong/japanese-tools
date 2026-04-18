@@ -276,9 +276,36 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 
 </div>
 
+<script>
+// Early-visible debug panel: any JS error or failed import below will still
+// leave this panel showing "1: script tag reached" so we know the page ran at all.
+(function(){
+  const d = document.createElement('div');
+  d.id = 'dbg-panel';
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#222;color:#9f9;font:11px monospace;padding:6px 8px;white-space:pre-wrap;max-height:40vh;overflow:auto;';
+  d.textContent = '1: classic script tag reached';
+  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(d));
+  window.__dbg = (msg) => {
+    d.textContent += '\n' + msg;
+  };
+  window.addEventListener('error', e => {
+    d.textContent += '\nERR: ' + (e.message || e.type) + ' @ ' + (e.filename || '?') + ':' + (e.lineno || '?');
+  });
+  window.addEventListener('unhandledrejection', e => {
+    d.textContent += '\nREJ: ' + (e.reason && (e.reason.message || e.reason) || 'unknown');
+  });
+  // Tap the panel to dismiss
+  document.addEventListener('click', e => {
+    if (e.target && e.target.id === 'dbg-panel') d.remove();
+  });
+})();
+</script>
 <script type="module">
+if (window.__dbg) window.__dbg('2: module script started');
 import { createSRS } from '/js/srs.js';
+if (window.__dbg) window.__dbg('3: imported srs.js');
 import { askGemini } from '/js/gemini.js';
+if (window.__dbg) window.__dbg('4: imported gemini.js');
 
 // ═══════════════════════════════════════════════════════════════════════
 // VOCABULARY DATA — loaded from /data/vocab-n5n4.json
@@ -753,9 +780,11 @@ function showBootError(msg) {
 }
 
 async function bootstrap() {
+  if (window.__dbg) window.__dbg('5: bootstrap started, fetching vocab JSON');
   let res;
   try {
     res = await fetch('/data/vocab-n5n4.json', { cache: 'no-cache' });
+    if (window.__dbg) window.__dbg('6: fetch returned, status=' + res.status + ' ct=' + (res.headers.get('content-type')||'?'));
   } catch (e) {
     showBootError('network error — ' + (e.message || 'fetch rejected'));
     return;
@@ -781,6 +810,7 @@ async function bootstrap() {
     showBootError('Vocab array was empty');
     return;
   }
+  if (window.__dbg) window.__dbg('7: parsed ' + VOCAB.length + ' entries, starting quiz');
   // Restore level toggle active state from localStorage.
   document.querySelectorAll('#level-bar .cat-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.level === activeLevel);
