@@ -513,12 +513,30 @@ function _stopGeminiAudio() {
 // everything — accept some extra prosody over silence.
 // const STABLE_MODEL = 'gemini-2.5-flash-preview-tts';
 
+// ── On-screen debug toast (visible on mobile; replaces needing a Mac remote inspector) ──
+function _dbg(msg) {
+  let el = document.getElementById('_dbg');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = '_dbg';
+    el.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;z-index:9999;' +
+      'background:rgba(0,0,0,0.82);color:#fff;font:11px/1.35 monospace;' +
+      'padding:6px 8px;border-radius:6px;max-height:40vh;overflow:auto;white-space:pre-wrap;';
+    el.addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+  }
+  const t = new Date().toISOString().slice(14,19);
+  el.textContent = `[${t}] ${msg}\n` + el.textContent;
+}
+
 async function speakGemini(text, opts) {
   _stopGeminiAudio();
   const ctx = _getAudioCtx();
-  // iOS Safari: AudioContext starts suspended until resumed inside a user gesture.
-  // Always try to resume; iOS can flip to 'suspended' or 'interrupted' silently.
-  if (ctx.state !== 'running') { try { await ctx.resume(); } catch(e) {} }
+  _dbg(`tap "${text}" ctx=${ctx.state}`);
+  if (ctx.state !== 'running') {
+    try { await ctx.resume(); _dbg(`resumed → ${ctx.state}`); }
+    catch(e) { _dbg(`resume ERR: ${e.message}`); }
+  }
 
   const ac = new AbortController();
   _currentAbort = ac;
@@ -532,17 +550,19 @@ async function speakGemini(text, opts) {
       body: JSON.stringify(body),
       signal: ac.signal
     });
+    _dbg(`/api/tts → ${res.status} ${res.headers.get('content-type')||''}`);
     data = await res.json();
   } catch(e) {
-    if (e.name === 'AbortError') return; // superseded by a newer speak() call
-    console.warn('Gemini TTS fetch failed, falling back:', e);
+    if (e.name === 'AbortError') { _dbg('aborted (superseded)'); return; }
+    _dbg(`fetch ERR: ${e.message}`);
     return speakWebSpeech(text, 0.9);
   }
-  if (ac.signal.aborted) return; // raced by a later call — don't play
+  if (ac.signal.aborted) { _dbg('aborted post-fetch'); return; }
   if (!data.audio) {
-    console.warn('Gemini TTS: no audio returned', data);
+    _dbg(`no audio in response: ${JSON.stringify(data).slice(0,160)}`);
     return speakWebSpeech(text, 0.9);
   }
+  _dbg(`audio b64 len=${data.audio.length}`);
   const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
   const buf = ctx.createBuffer(1, bytes.length / 2, 24000);
   const ch = buf.getChannelData(0);
@@ -552,8 +572,9 @@ async function speakGemini(text, opts) {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
-    src.onended = resolve;
-    src.start();
+    src.onended = () => { _dbg('onended'); resolve(); };
+    try { src.start(); _dbg(`start OK ctx=${ctx.state}`); }
+    catch(e) { _dbg(`start ERR: ${e.message}`); resolve(); }
     _currentSource = src;
   });
 }
