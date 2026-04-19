@@ -453,10 +453,17 @@ async function recordAndTranscribe(durationMs = 3500) {
         try {
           const res = await fetch('/api/stt', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ audio: base64, mimeType: mimeType || 'audio/webm' }),
           });
+          const ct = res.headers.get('content-type') || '';
+          if (!ct.includes('application/json')) {
+            reject(new Error('Auth session expired — reload the page and try again.'));
+            return;
+          }
           const data = await res.json();
+          if (!res.ok) { reject(new Error(data.error || `STT server error ${res.status}`)); return; }
           resolve(data.transcript || '');
         } catch (e) { reject(e); }
       };
