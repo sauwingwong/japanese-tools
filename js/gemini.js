@@ -61,6 +61,10 @@
 
     return fetch('/api/gemini', {
       method: 'POST',
+      // Send Cloudflare Access cookies so /api/* stays authorised after
+      // the session refresh. Without this, cross-origin redirect handling
+      // can yield an Unexpected-token HTML parse on login pages.
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: signal

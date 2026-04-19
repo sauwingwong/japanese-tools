@@ -591,7 +591,16 @@ let _currentSource = null;
 let _currentAbort = null;
 
 function _getAudioCtx() {
-  if (!_audioCtx || _audioCtx.state === 'closed') _audioCtx = new AudioContext();
+  // iOS flips AudioContext to 'interrupted' when the PWA is backgrounded;
+  // resume() alone doesn't always recover. Rebuild on dead states.
+  const dead = !_audioCtx
+    || _audioCtx.state === 'closed'
+    || _audioCtx.state === 'interrupted';
+  if (dead) {
+    try { _audioCtx && _audioCtx.close(); } catch (e) {}
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _ctxUnlocked = false;
+  }
   return _audioCtx;
 }
 
@@ -615,6 +624,21 @@ function _unlockOnGesture() {
 }
 ['touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(evt => {
   document.addEventListener(evt, _unlockOnGesture, { passive: true, capture: true });
+});
+
+// Pre-emptively resume audio when the PWA returns from background so the
+// next ▶ tap plays without a silent first click.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    try { _getAudioCtx().resume(); } catch (e) {}
+  }
+});
+// Release the AudioContext on page hide — prevents "AudioContext quota
+// exceeded" after rapid page-to-page navigation.
+window.addEventListener('pagehide', () => {
+  try { if (_currentSource) _currentSource.stop(); } catch (e) {}
+  try { if (_audioCtx) _audioCtx.close(); } catch (e) {}
+  _audioCtx = null; _currentSource = null;
 });
 
 function _stopGeminiAudio() {
@@ -641,6 +665,7 @@ async function speakGemini(text, opts) {
     if (opts && opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: ac.signal
@@ -1478,6 +1503,7 @@ async function recordAndTranscribe(durationMs = 3000) {
         try {
           const res = await fetch('/api/stt', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ audio: base64, mimeType: mimeType || 'audio/webm' })
           });

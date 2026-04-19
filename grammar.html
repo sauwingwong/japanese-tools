@@ -178,7 +178,7 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
   function s(k,v,t){try{localStorage.setItem(P+k,JSON.stringify({value:v,exp:Date.now()+t*86400000}));}catch(_e){}}
   root.askGemini=function(prompt,opts){opts=opts||{};var t=typeof opts.ttlDays==='number'?opts.ttlDays:D;if(opts.cacheKey&&opts.bypassCache!==true){var h=g(opts.cacheKey);if(h!==null)return Promise.resolve(h);}
     var b={prompt:prompt};if(opts.schema)b.schema=opts.schema;if(typeof opts.temperature==='number')b.temperature=opts.temperature;if(opts.model)b.model=opts.model;
-    return fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b),signal:opts.signal}).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error('Gemini failed: '+(j&&j.error||r.status));},function(){throw new Error('Gemini failed: HTTP '+r.status);});return r.json();}).then(function(d){if(opts.cacheKey)s(opts.cacheKey,d.text,t);return d.text;});};
+    return fetch('/api/gemini',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(b),signal:opts.signal}).then(function(r){if(!r.ok)return r.json().then(function(j){throw new Error('Gemini failed: '+(j&&j.error||r.status));},function(){throw new Error('Gemini failed: HTTP '+r.status);});return r.json();}).then(function(d){if(opts.cacheKey)s(opts.cacheKey,d.text,t);return d.text;});};
   root.clearGeminiCache=function(k){try{localStorage.removeItem(P+k);}catch(_e){}};
   root.clearAllGeminiCache=function(){try{var ks=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(P)===0)ks.push(k);}for(var j=0;j<ks.length;j++)localStorage.removeItem(ks[j]);}catch(_e){}};
 })(window);
@@ -287,6 +287,27 @@ async function getCoach(pattern, wrongPick) {
 
 // ── Speech (delegate to phoneme-trainer's pattern: use Gemini TTS via /api/tts) ──
 let _audioCtx = null;
+let _currentSource = null;
+// iOS flips AudioContext to 'interrupted' after backgrounding; rebuild on
+// dead states instead of relying on resume() alone.
+function _getAudioCtx() {
+  const dead = !_audioCtx || _audioCtx.state === 'closed' || _audioCtx.state === 'interrupted';
+  if (dead) {
+    try { _audioCtx && _audioCtx.close(); } catch (e) {}
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return _audioCtx;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    try { _getAudioCtx().resume(); } catch (e) {}
+  }
+});
+window.addEventListener('pagehide', () => {
+  try { if (_currentSource) _currentSource.stop(); } catch (e) {}
+  try { if (_audioCtx) _audioCtx.close(); } catch (e) {}
+  _audioCtx = null; _currentSource = null;
+});
 async function speak(text, opts) {
   opts = opts || {};
   try {
@@ -294,20 +315,32 @@ async function speak(text, opts) {
     if (opts.model) body.model = opts.model;
     const res = await fetch('/api/tts', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     if (!res.ok) return;
     const { audio } = await res.json();
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state !== 'running') await _audioCtx.resume();
+    let ctx = _getAudioCtx();
+    if (ctx.state !== 'running') { try { await ctx.resume(); } catch (e) {} }
     const pcm = new Int16Array(bytes.buffer);
-    const buf = _audioCtx.createBuffer(1, pcm.length, 24000);
-    const ch = buf.getChannelData(0);
-    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
-    const src = _audioCtx.createBufferSource();
-    src.buffer = buf; src.connect(_audioCtx.destination); src.start();
+    const playInto = (activeCtx) => {
+      const buf = activeCtx.createBuffer(1, pcm.length, 24000);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+      const src = activeCtx.createBufferSource();
+      src.buffer = buf; src.connect(activeCtx.destination); src.start();
+      _currentSource = src;
+    };
+    try { playInto(ctx); }
+    catch (err) {
+      // Context died between fetch and start — rebuild + retry once.
+      _audioCtx = null;
+      ctx = _getAudioCtx();
+      if (ctx.state !== 'running') await ctx.resume();
+      try { playInto(ctx); } catch (err2) { console.warn('TTS retry failed:', err2); }
+    }
   } catch (e) { console.warn('TTS failed:', e); }
 }
 

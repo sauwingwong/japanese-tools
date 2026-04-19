@@ -194,7 +194,29 @@ const srs = createSRS('phrases-tourist');
 
 // ── Audio ──
 let _ctx = null;
+let _currentSource = null;
 let _currentAbort = null;
+// iOS sends the AudioContext to 'interrupted' when the PWA is backgrounded;
+// resume() alone doesn't always recover it. _getCtx() detects dead states
+// (closed/interrupted) and rebuilds transparently.
+function _getCtx() {
+  const dead = !_ctx || _ctx.state === 'closed' || _ctx.state === 'interrupted';
+  if (dead) {
+    try { _ctx && _ctx.close(); } catch (e) {}
+    _ctx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return _ctx;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    try { _getCtx().resume(); } catch (e) {}
+  }
+});
+window.addEventListener('pagehide', () => {
+  try { if (_currentSource) _currentSource.stop(); } catch (e) {}
+  try { if (_ctx) _ctx.close(); } catch (e) {}
+  _ctx = null; _currentSource = null;
+});
 function _speakFallback(text) {
   try {
     speechSynthesis.cancel();
@@ -211,10 +233,11 @@ async function speak(text, opts) {
     _currentAbort = ac;
     const body = { text };
     if (opts.model) body.model = opts.model;
-    if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_ctx.state !== 'running') { try { await _ctx.resume(); } catch (e) {} }
+    let ctx = _getCtx();
+    if (ctx.state !== 'running') { try { await ctx.resume(); } catch (e) {} }
     const res = await fetch('/api/tts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: ac.signal,
     });
     if (!res.ok) {
@@ -231,11 +254,23 @@ async function speak(text, opts) {
     }
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     const pcm = new Int16Array(bytes.buffer);
-    const buf = _ctx.createBuffer(1, pcm.length, 24000);
-    const ch = buf.getChannelData(0);
-    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
-    const src = _ctx.createBufferSource();
-    src.buffer = buf; src.connect(_ctx.destination); src.start();
+    const _playInto = async (activeCtx) => {
+      if (activeCtx.state !== 'running') { try { await activeCtx.resume(); } catch (e) {} }
+      const buf = activeCtx.createBuffer(1, pcm.length, 24000);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+      const src = activeCtx.createBufferSource();
+      src.buffer = buf; src.connect(activeCtx.destination); src.start();
+      _currentSource = src;
+    };
+    try { await _playInto(ctx); }
+    catch (err) {
+      // ctx died between fetch and start — rebuild + retry once.
+      console.warn('TTS playback failed, rebuilding ctx:', err);
+      _ctx = null;
+      try { await _playInto(_getCtx()); }
+      catch (err2) { console.warn('TTS retry failed:', err2); _speakFallback(text); }
+    }
   } catch (e) {
     if (e && e.name === 'AbortError') return;
     console.warn('TTS error — falling back to speechSynthesis:', e);
@@ -411,8 +446,48 @@ if (SR) {
 function katakanaToHiragana(str) {
   return str.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
 }
+
+// Map counter+digit tokens (both arabic "6月" and kanji "六月") to their
+// Japanese reading so the grader treats them as equivalent to the hiragana
+// form. Without this, Gemini STT returning "6月" fails to match expected
+// "ろくがつ". Covers the most common date/time counters; anything unknown
+// falls through untouched.
+const JA_DIGIT_TABLE = (function () {
+  const months = ['いちがつ','にがつ','さんがつ','しがつ','ごがつ','ろくがつ','しちがつ','はちがつ','くがつ','じゅうがつ','じゅういちがつ','じゅうにがつ'];
+  const hours  = ['いちじ','にじ','さんじ','よじ','ごじ','ろくじ','しちじ','はちじ','くじ','じゅうじ','じゅういちじ','じゅうにじ'];
+  // Days 1..31 with irregulars at 1,2,3,4,5,6,7,8,9,10,14,20,24.
+  const days = [
+    'ついたち','ふつか','みっか','よっか','いつか','むいか','なのか','ようか','ここのか','とおか',
+    'じゅういちにち','じゅうににち','じゅうさんにち','じゅうよっか','じゅうごにち','じゅうろくにち','じゅうしちにち','じゅうはちにち','じゅうくにち','はつか',
+    'にじゅういちにち','にじゅうににち','にじゅうさんにち','にじゅうよっか','にじゅうごにち','にじゅうろくにち','にじゅうしちにち','にじゅうはちにち','にじゅうくにち','さんじゅうにち','さんじゅういちにち'
+  ];
+  const kanjiDigit = { 1:'一', 2:'二', 3:'三', 4:'四', 5:'五', 6:'六', 7:'七', 8:'八', 9:'九',
+                       10:'十', 11:'十一', 12:'十二', 13:'十三', 14:'十四', 15:'十五', 16:'十六', 17:'十七', 18:'十八', 19:'十九',
+                       20:'二十', 21:'二十一', 22:'二十二', 23:'二十三', 24:'二十四', 25:'二十五', 26:'二十六', 27:'二十七', 28:'二十八', 29:'二十九', 30:'三十', 31:'三十一' };
+  const table = [];
+  function push(arabic, kanji, reading) {
+    // Sort longer strings first below so "12月" matches before "1月".
+    table.push([arabic, reading], [kanji, reading]);
+  }
+  for (let i = 1; i <= 12; i++) push(i + '月', kanjiDigit[i] + '月', months[i-1]);
+  for (let i = 1; i <= 12; i++) push(i + '時', kanjiDigit[i] + '時', hours[i-1]);
+  for (let i = 1; i <= 31; i++) push(i + '日', kanjiDigit[i] + '日', days[i-1]);
+  // Longest-token-first replacement prevents "1月" eating from "12月".
+  table.sort((a, b) => b[0].length - a[0].length);
+  return table;
+})();
+
+function normalizeJaDigits(str) {
+  // Full-width digits → half-width so "６月" normalises same as "6月".
+  let out = String(str).replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  for (const [token, reading] of JA_DIGIT_TABLE) {
+    if (out.indexOf(token) !== -1) out = out.split(token).join(reading);
+  }
+  return out;
+}
+
 function cleanJP(str) {
-  return katakanaToHiragana(String(str).trim().replace(/[。、！？!?\s]/g, ''));
+  return katakanaToHiragana(normalizeJaDigits(String(str).trim()).replace(/[。、！？!?\s]/g, ''));
 }
 function srCompare(expectedHiragana, heard, expectedKanji) {
   const e = cleanJP(expectedHiragana);
@@ -431,7 +506,9 @@ function srCompare(expectedHiragana, heard, expectedKanji) {
   return 'miss';
 }
 function getSupportedMimeType() {
-  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac'];
+  // iOS Safari only supports audio/mp4 (AAC). Put it first so iPhones
+  // don't fall through to an empty mimeType and a broken MediaRecorder.
+  const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac'];
   for (const t of types) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
   }
