@@ -91,9 +91,13 @@ footer {
   border-top: 1px solid rgba(0,0,0,0.08);
   display: grid; grid-template-columns: repeat(7, 1fr);
   padding: 7px 0; padding-bottom: calc(7px + env(safe-area-inset-bottom));
-  /* Inset for the iPhone rounded corners so Home/Phrases aren't clipped. */
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  /* Inset the outermost tabs away from the iPhone rounded corners. In
+     portrait safe-area-inset-left/right are 0, so the physical screen
+     curve clips the first and last tabs. Use max() to always reserve at
+     least 14 px, and go wider in landscape where the notch safe area is
+     larger. */
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
 }
 @media(min-width:600px){ .nav-tabs { display: none; } }
 .tabi {
