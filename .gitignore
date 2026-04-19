@@ -1,0 +1,10 @@
+# Personal Claude Code state (session JSON, plans, local settings)
+.claude/
+
+# Personal-in-repo notes (Claude convention)
+*.local.md
+CLAUDE.local.md
+
+# OS cruft
+.DS_Store
+Thumbs.db
