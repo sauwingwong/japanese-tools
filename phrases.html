@@ -93,6 +93,13 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
 .grade-good { background: #2e7d32; color: #fff; }
 .grade-hard { background: #fff; color: #e65100; border: 1.5px solid #e65100 !important; }
 
+.play-speak { background: #fff; color: #2e7d32; border: 1.5px solid #2e7d32 !important; }
+.play-speak.listening { background: #ffebee; color: #c62828; border-color: #c62828 !important; }
+.sr-exact   { color: #2e7d32; font-weight: 600; }
+.sr-close   { color: #558b2f; font-weight: 600; }
+.sr-partial { color: #ef6c00; font-weight: 600; }
+.sr-miss    { color: #c62828; font-weight: 600; }
+
 .pstats { display: flex; justify-content: space-between; font-size: 0.82rem; color: #888; margin: 6px 2px 12px; }
 
 .nav-tabs {
@@ -140,6 +147,10 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
         <button class="play-rich" id="p-rich" title="Rich voice (Gemini 3.1)">✨ Rich</button>
         <button id="p-reveal" style="background:#fff; border:1.5px solid #bdbdbd !important; color:#555;">👁 Reveal</button>
       </div>
+      <div class="play-row">
+        <button class="play-speak" id="p-speak">🎤 Say it aloud</button>
+      </div>
+      <div id="p-speak-result" style="font-size:0.88rem; min-height:1.4em; margin-top:4px;"></div>
       <div class="grade-row" id="p-grade" style="display:none;">
         <button class="grade-good" id="p-good">✓ Got it</button>
         <button class="grade-hard" id="p-hard">↻ Need more</button>
@@ -319,6 +330,7 @@ function renderPractice() {
   document.getElementById('p-note').textContent = '';
   document.getElementById('p-grade').style.display = 'none';
   document.getElementById('p-reveal').style.display = '';
+  document.getElementById('p-speak-result').innerHTML = '';
 }
 
 function reveal() {
@@ -382,6 +394,141 @@ document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active',
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// SPEECH RECOGNITION — "Say it aloud" (ported from listening-quiz.html)
+// ═══════════════════════════════════════════════════════════════════════
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+let phraseRec = null;
+if (SR) {
+  phraseRec = new SR();
+  phraseRec.lang = 'ja-JP';
+  phraseRec.interimResults = false;
+  phraseRec.maxAlternatives = 5;
+}
+
+function katakanaToHiragana(str) {
+  return str.replace(/[\u30A1-\u30F6]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+function cleanJP(str) {
+  return katakanaToHiragana(String(str).trim().replace(/[。、！？!?\s]/g, ''));
+}
+function srCompare(expectedHiragana, heard, expectedKanji) {
+  const e = cleanJP(expectedHiragana);
+  const h = cleanJP(heard);
+  if (h === e || h.includes(e) || e.includes(h)) return 'exact';
+  if (expectedKanji) {
+    const k = String(expectedKanji).trim().replace(/[。、！？!?\s]/g, '');
+    const hRaw = String(heard).trim().replace(/[。、！？!?\s]/g, '');
+    if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
+  }
+  let overlap = 0;
+  for (let i = 0; i < Math.min(e.length, h.length); i++) if (e[i] === h[i]) overlap++;
+  const ratio = e.length ? overlap / e.length : 0;
+  if (ratio >= 0.7) return 'close';
+  if (ratio >= 0.4) return 'partial';
+  return 'miss';
+}
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac'];
+  for (const t of types) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+async function recordAndTranscribe(durationMs = 3500) {
+  const mimeType = getSupportedMimeType();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        try {
+          const res = await fetch('/api/stt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: base64, mimeType: mimeType || 'audio/webm' }),
+          });
+          const data = await res.json();
+          resolve(data.transcript || '');
+        } catch (e) { reject(e); }
+      };
+      reader.readAsDataURL(blob);
+    };
+    rec.start();
+    setTimeout(() => rec.stop(), durationMs);
+  });
+}
+
+const speakBtn = document.getElementById('p-speak');
+const speakResult = document.getElementById('p-speak-result');
+
+function gradeSpoken(alts) {
+  if (!currentPhrase) return;
+  const rank = ['exact', 'close', 'partial', 'miss'];
+  let best = 'miss';
+  let bestAlt = alts[0] || '';
+  for (const a of alts) {
+    if (!a) continue;
+    const lv = srCompare(currentPhrase.reading || currentPhrase.ja, a, currentPhrase.ja);
+    if (rank.indexOf(lv) < rank.indexOf(best)) { best = lv; bestAlt = a; }
+  }
+  const cfg = {
+    exact:   { cls: 'sr-exact',   icon: '✓', label: 'Great match!' },
+    close:   { cls: 'sr-close',   icon: '~', label: 'Close — keep going!' },
+    partial: { cls: 'sr-partial', icon: '△', label: 'Partial — try again' },
+    miss:    { cls: 'sr-miss',    icon: '✗', label: 'Not recognised — try again' },
+  }[best];
+  speakResult.innerHTML =
+    `<span class="${cfg.cls}">${cfg.icon} ${cfg.label}</span>` +
+    ` <span style="color:#888; margin-left:8px;">You said: <strong>${escapeHtml(bestAlt)}</strong></span>`;
+}
+
+speakBtn.addEventListener('click', async () => {
+  if (!currentPhrase) return;
+  speakBtn.textContent = '🔴 Listening…';
+  speakBtn.classList.add('listening');
+  speakBtn.disabled = true;
+  speakResult.innerHTML = '<span style="color:#888;">Listening… say the phrase now</span>';
+
+  const resetBtn = () => {
+    speakBtn.textContent = '🎤 Say it aloud';
+    speakBtn.classList.remove('listening');
+    speakBtn.disabled = false;
+  };
+
+  if (!phraseRec && isMobile) {
+    try { gradeSpoken([await recordAndTranscribe(3500)]); }
+    catch (e) {
+      speakResult.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error — check permissions')}</span>`;
+    }
+    resetBtn();
+    return;
+  }
+  if (!phraseRec) {
+    speakResult.innerHTML = '<span class="sr-miss">⚠ Speech recognition requires Chrome or Edge on desktop.</span>';
+    resetBtn();
+    return;
+  }
+  phraseRec.onresult = ev => gradeSpoken(Array.from(ev.results[0]).map(r => r.transcript));
+  phraseRec.onerror = ev => {
+    const msgs = {
+      'no-speech':   'No speech detected.',
+      'not-allowed': 'Mic access denied — check browser settings.',
+      'network':     'Network error (speech recognition needs internet).',
+    };
+    speakResult.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(msgs[ev.error] || ev.error)}</span>`;
+  };
+  phraseRec.onend = resetBtn;
+  try { phraseRec.start(); } catch { /* already running */ }
+});
 
 // ── Init ──
 renderFilter();
