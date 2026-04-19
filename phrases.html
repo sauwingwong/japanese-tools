@@ -184,6 +184,14 @@ const srs = createSRS('phrases-tourist');
 // ── Audio ──
 let _ctx = null;
 let _currentAbort = null;
+function _speakFallback(text) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP'; u.rate = 0.9;
+    speechSynthesis.speak(u);
+  } catch {}
+}
 async function speak(text, opts) {
   opts = opts || {};
   try {
@@ -198,9 +206,18 @@ async function speak(text, opts) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: ac.signal,
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.warn('TTS HTTP', res.status, '— falling back to speechSynthesis');
+      _speakFallback(text);
+      return;
+    }
     const { audio } = await res.json();
     if (ac.signal.aborted) return;
+    if (!audio) {
+      console.warn('TTS returned no audio — falling back to speechSynthesis');
+      _speakFallback(text);
+      return;
+    }
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     const pcm = new Int16Array(bytes.buffer);
     const buf = _ctx.createBuffer(1, pcm.length, 24000);
@@ -208,7 +225,11 @@ async function speak(text, opts) {
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
     const src = _ctx.createBufferSource();
     src.buffer = buf; src.connect(_ctx.destination); src.start();
-  } catch (e) { /* abort or network — ignore */ }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+    console.warn('TTS error — falling back to speechSynthesis:', e);
+    _speakFallback(text);
+  }
 }
 
 // ── Category filter ──
