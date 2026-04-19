@@ -517,16 +517,33 @@ speakBtn.addEventListener('click', async () => {
     resetBtn();
     return;
   }
+  // Fallback used when Web Speech returns `network` (Google STT blocked
+  // by firewall / region / privacy settings). Records mic audio and sends
+  // it to our /api/stt endpoint instead.
+  let usedServerFallback = false;
+  async function runServerFallback() {
+    if (usedServerFallback) return;
+    usedServerFallback = true;
+    speakResult.innerHTML = '<span style="color:#888;">Google STT blocked — retrying via server…</span>';
+    try {
+      const transcript = await recordAndTranscribe(3500);
+      gradeSpoken([transcript]);
+    } catch (e) {
+      speakResult.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error — check permissions')}</span>`;
+    }
+    resetBtn();
+  }
+
   phraseRec.onresult = ev => gradeSpoken(Array.from(ev.results[0]).map(r => r.transcript));
   phraseRec.onerror = ev => {
+    if (ev.error === 'network') { runServerFallback(); return; }
     const msgs = {
       'no-speech':   'No speech detected.',
       'not-allowed': 'Mic access denied — check browser settings.',
-      'network':     'Network error (speech recognition needs internet).',
     };
     speakResult.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(msgs[ev.error] || ev.error)}</span>`;
   };
-  phraseRec.onend = resetBtn;
+  phraseRec.onend = () => { if (!usedServerFallback) resetBtn(); };
   try { phraseRec.start(); } catch { /* already running */ }
 });
 
