@@ -1,26 +1,32 @@
-// Cloudflare Pages Function — Gemini TTS proxy
-// Keeps GEMINI_API_KEY server-side (set as a Pages environment secret).
+// Cloudflare Pages Function — TTS proxy (Google Cloud TTS + Gemini)
 //
-// Model: gemini-3.1-flash-tts-preview (upgraded 2026-04-17 after enabling paid tier)
-// Fall back to 'gemini-2.5-flash-preview-tts' if 3.1 throws quota errors.
+// Two providers, routed by `model` field:
+//   - cloud-ja-chirp3-hd-leda (default): Google Cloud Text-to-Speech
+//     Chirp3 HD — fast (~100–300 ms), high free quota (4M chars/month),
+//     consistent neutral tone. Used for ▶ Play.
+//   - gemini-3.1-flash-tts-preview: Gemini expressive TTS, used for ✨ Rich.
+//   - gemini-2.5-flash-preview-tts: legacy, still accepted.
+//
+// Env vars:
+//   CLOUD_TTS_API_KEY — for texttospeech.googleapis.com (Chirp3)
+//   GEMINI_API_KEY    — for generativelanguage.googleapis.com (Gemini TTS)
 //
 // Returns: { audio: <base64 PCM string> }
-// Audio spec: 16-bit signed PCM, 24 kHz, mono
+// Audio spec: 16-bit signed little-endian PCM, 24 kHz, mono
+// (Cloud TTS WAV header is stripped server-side so the client's raw-PCM
+// decode path works for both providers without branching.)
 
-// Default to 2.5 ("quick"): ~30% faster than 3.1 and naturally neutral, which
-// fits drill-style replay where the same word gets pressed many times. 3.1
-// ("rich") stays available via an explicit `model` on the request for when
-// the user wants a richer rendition (invoked by a sparkle button in the UI).
-const DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
-// Models the client is allowed to request via the optional `model` field.
+const DEFAULT_MODEL = 'cloud-ja-chirp3-hd-leda';
 const ALLOWED_MODELS = new Set([
+  'cloud-ja-chirp3-hd-leda',
   'gemini-3.1-flash-tts-preview',
   'gemini-2.5-flash-preview-tts',
 ]);
 
-// Voice to use. Kore = calm female, good for Japanese.
-// Other options: Aoede, Charon, Fenrir, Puck — all support 70+ languages.
+// Gemini voice. Kore = calm female, good for Japanese.
 const VOICE = 'Kore';
+// Cloud TTS voice — full Google voice name.
+const CLOUD_VOICE = 'ja-JP-Chirp3-HD-Leda';
 
 // Pedagogical style prompt prepended to the TTS input. Gemini 3.1 TTS is a
 // conversational model that otherwise adds varying prosody / emotion / filler
@@ -39,7 +45,7 @@ const CACHE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 // Bump this to invalidate all previously-cached audio. Prior 2.5 entries
 // returned empty/short audio for some keys (earlier model-default churn),
 // which manifested as silent ▶ playback on some Tourist Phrases rows.
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 
 async function sha1Hex(str) {
   const buf = new TextEncoder().encode(str);
@@ -48,12 +54,22 @@ async function sha1Hex(str) {
     .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Strip RIFF/WAV header from base64-encoded LINEAR16 audio returned by
+// Google Cloud TTS so the client can treat the payload as raw 16-bit PCM
+// exactly like the Gemini TTS output.
+function stripWavHeader(b64) {
+  const bin = atob(b64);
+  if (!bin.startsWith('RIFF')) return b64; // already raw PCM
+  const dataIdx = bin.indexOf('data');
+  const pcmStart = dataIdx >= 0 ? dataIdx + 8 : 44;
+  const pcm = bin.substring(pcmStart);
+  // Re-encode to base64. btoa handles binary strings fine.
+  return btoa(pcm);
+}
+
 export async function onRequestPost(context) {
-  // ── CORS preflight (handled by onRequestOptions below) ──
-  const apiKey = context.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
-  }
+  const geminiKey = context.env.GEMINI_API_KEY;
+  const cloudKey = context.env.CLOUD_TTS_API_KEY;
 
   let text, model;
   try {
@@ -64,24 +80,31 @@ export async function onRequestPost(context) {
   if (!text) return Response.json({ error: 'Missing text' }, { status: 400 });
 
   const chosenModel = ALLOWED_MODELS.has(model) ? model : DEFAULT_MODEL;
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent`;
+  const isCloud = chosenModel.startsWith('cloud-');
 
-  // Both 2.5 and 3.1 TTS models hang (→ Cloudflare edge 502) on very short input
-  // like a single kana. Pad to give the model enough context to synthesise quickly.
-  // The trailing period adds ~a comma-length pause without altering the kana sound.
+  // Short-text padding — Gemini TTS hangs on single-kana inputs. Harmless
+  // for Cloud TTS too, so apply uniformly.
   const rawText = text.trim().length <= 2 ? `${text}。` : text;
-  // Style prefix only on 3.1 — 2.5 rejects the English "Say …:" frame with
-  // upstream 502s on some inputs.
+  // Style prefix only on Gemini 3.1.
   const ttsText = chosenModel === 'gemini-3.1-flash-tts-preview'
     ? STYLE_PREFIX + rawText
     : rawText;
 
-  // ── Edge cache lookup ── Hash the final payload so a change to the style
-  // prefix or voice invalidates old entries automatically.
-  const cacheKeyStr = `${CACHE_VERSION}|${chosenModel}|${VOICE}|${ttsText}`;
+  // Per-provider required key check.
+  if (isCloud && !cloudKey) {
+    return Response.json({ error: 'CLOUD_TTS_API_KEY not configured' }, { status: 500 });
+  }
+  if (!isCloud && !geminiKey) {
+    return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+  }
+
+  // Cache key includes model + voice; the hash ensures distinct providers
+  // never collide. Same-text replays return identical bytes.
+  const voiceForKey = isCloud ? CLOUD_VOICE : VOICE;
+  const cacheKeyStr = `${CACHE_VERSION}|${chosenModel}|${voiceForKey}|${ttsText}`;
   const cacheKeyHash = await sha1Hex(cacheKeyStr);
   const cacheReq = new Request(
-    `https://tts-cache.internal/${chosenModel}/${VOICE}/${cacheKeyHash}`,
+    `https://tts-cache.internal/${chosenModel}/${voiceForKey}/${cacheKeyHash}`,
     { method: 'GET' }
   );
   const edgeCache = caches.default;
@@ -95,12 +118,44 @@ export async function onRequestPost(context) {
     });
   }
 
-  // One attempt against a given model. Returns { audio } on success, or
-  // { error, status } on failure. Never throws.
+  // ── Provider: Google Cloud TTS (Chirp3 HD) ──
+  async function callCloud(inputText) {
+    const upstreamAbort = new AbortController();
+    const upstreamTimer = setTimeout(() => upstreamAbort.abort(), 20000);
+    try {
+      const res = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${cloudKey}`,
+        {
+          method: 'POST',
+          signal: upstreamAbort.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: { text: inputText },
+            voice: { languageCode: 'ja-JP', name: CLOUD_VOICE },
+            audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: 24000 }
+          })
+        }
+      );
+      clearTimeout(upstreamTimer);
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        return { error: `HTTP ${res.status}`, detail: errBody, status: res.status };
+      }
+      const json = await res.json();
+      const audioWav = json?.audioContent;
+      if (!audioWav) return { error: 'No audioContent in response', status: 502 };
+      return { audio: stripWavHeader(audioWav) };
+    } catch (e) {
+      clearTimeout(upstreamTimer);
+      return { error: e.name === 'AbortError' ? 'Upstream timeout' : e.message, status: 504 };
+    }
+  }
+
+  // ── Provider: Gemini TTS (2.5 or 3.1) ──
   async function callGemini(modelName, inputText) {
     const upstreamAbort = new AbortController();
     const upstreamTimer = setTimeout(() => upstreamAbort.abort(), 20000);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`;
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -131,22 +186,22 @@ export async function onRequestPost(context) {
     }
   }
 
-  // Primary call against the requested/default model.
-  let result = await callGemini(chosenModel, ttsText);
-
-  // Fallback: if the user got 2.5 (quick) and it failed, retry once on 3.1.
-  // 2.5 flash-preview-tts occasionally 502s on specific short hiragana
-  // phrases; 3.1 handles them fine. We cache the result under the 2.5 key so
-  // subsequent presses are instant and consistent.
-  if (result.error && chosenModel === 'gemini-2.5-flash-preview-tts') {
-    const fallbackText = STYLE_PREFIX + rawText; // 3.1 wants the style frame
-    const fb = await callGemini('gemini-3.1-flash-tts-preview', fallbackText);
-    if (fb.audio) result = fb;
+  // Dispatch to the right provider.
+  let result;
+  if (isCloud) {
+    result = await callCloud(rawText);
+  } else {
+    result = await callGemini(chosenModel, ttsText);
+    // Gemini 2.5 (legacy) occasionally 502s on short hiragana — retry on 3.1.
+    if (result.error && chosenModel === 'gemini-2.5-flash-preview-tts') {
+      const fb = await callGemini('gemini-3.1-flash-tts-preview', STYLE_PREFIX + rawText);
+      if (fb.audio) result = fb;
+    }
   }
 
   if (result.error) {
     return Response.json(
-      { error: `Gemini upstream: ${result.error}`, detail: result.detail },
+      { error: `Upstream ${isCloud ? 'Cloud TTS' : 'Gemini'}: ${result.error}`, detail: result.detail },
       { status: result.status || 502, headers: { 'Access-Control-Allow-Origin': '*' } }
     );
   }
