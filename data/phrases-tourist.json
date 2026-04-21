@@ -207,5 +207,107 @@
     { "id": "small-23", "ja": "すごい！", "reading": "sugoi!", "en": "Awesome! / Wow!", "cat": "smalltalk", "note": "Very common reaction" },
     { "id": "small-24", "ja": "本当ですか？", "reading": "hontou desu ka?", "en": "Really?", "cat": "smalltalk", "note": "" },
     { "id": "small-25", "ja": "写真を撮ってもいいですか？", "reading": "shashin wo totte mo ii desu ka?", "en": "Can I take a photo?", "cat": "smalltalk", "note": "Always ask first" }
+  ],
+  "dialogues": [
+    {
+      "id": "dlg-restaurant",
+      "title": "Ordering at a restaurant",
+      "cat": "food",
+      "roles": { "A": "You (customer)", "B": "Server" },
+      "lines": [
+        { "speaker": "B", "ja": "いらっしゃいませ。何名様ですか？", "reading": "Irasshaimase. Nan-mei-sama desu ka?", "en": "Welcome. How many people?" },
+        { "speaker": "A", "ja": "二人です。", "reading": "Futari desu.", "en": "Two people." },
+        { "speaker": "B", "ja": "こちらへどうぞ。", "reading": "Kochira e douzo.", "en": "This way, please." },
+        { "speaker": "A", "ja": "すみません、メニューをください。", "reading": "Sumimasen, menyuu wo kudasai.", "en": "Excuse me, the menu please." },
+        { "speaker": "B", "ja": "はい、どうぞ。ご注文はお決まりですか？", "reading": "Hai, douzo. Go-chuumon wa o-kimari desu ka?", "en": "Here you are. Have you decided your order?" },
+        { "speaker": "A", "ja": "これをください。", "reading": "Kore wo kudasai.", "en": "I'll have this." },
+        { "speaker": "B", "ja": "お飲み物はいかがですか？", "reading": "O-nomimono wa ikaga desu ka?", "en": "How about a drink?" },
+        { "speaker": "A", "ja": "お水をお願いします。", "reading": "O-mizu wo onegai shimasu.", "en": "Water, please." },
+        { "speaker": "B", "ja": "かしこまりました。少々お待ちください。", "reading": "Kashikomarimashita. Shou-shou o-machi kudasai.", "en": "Certainly. Please wait a moment." },
+        { "speaker": "A", "ja": "すみません、お会計お願いします。", "reading": "Sumimasen, o-kaikei onegai shimasu.", "en": "Excuse me, the bill please." },
+        { "speaker": "B", "ja": "二千円になります。", "reading": "Ni-sen-en ni narimasu.", "en": "That'll be 2,000 yen." },
+        { "speaker": "A", "ja": "ありがとうございました。", "reading": "Arigatou gozaimashita.", "en": "Thank you very much." }
+      ]
+    },
+    {
+      "id": "dlg-shopping",
+      "title": "Buying a souvenir",
+      "cat": "shopping",
+      "roles": { "A": "You (customer)", "B": "Shop clerk" },
+      "lines": [
+        { "speaker": "B", "ja": "いらっしゃいませ。何かお探しですか？", "reading": "Irasshaimase. Nanika o-sagashi desu ka?", "en": "Welcome. Are you looking for something?" },
+        { "speaker": "A", "ja": "はい、お土産を探しています。", "reading": "Hai, omiyage wo sagashite imasu.", "en": "Yes, I'm looking for a souvenir." },
+        { "speaker": "B", "ja": "こちらはいかがですか？", "reading": "Kochira wa ikaga desu ka?", "en": "How about this one?" },
+        { "speaker": "A", "ja": "これはいくらですか？", "reading": "Kore wa ikura desu ka?", "en": "How much is this?" },
+        { "speaker": "B", "ja": "千五百円です。", "reading": "Sen-go-hyaku-en desu.", "en": "It's 1,500 yen." },
+        { "speaker": "A", "ja": "ちょっと高いですね。", "reading": "Chotto takai desu ne.", "en": "That's a bit expensive." },
+        { "speaker": "B", "ja": "こちらは千円です。", "reading": "Kochira wa sen-en desu.", "en": "This one is 1,000 yen." },
+        { "speaker": "A", "ja": "じゃあ、これをお願いします。", "reading": "Jaa, kore wo onegai shimasu.", "en": "Okay, I'll take this." },
+        { "speaker": "B", "ja": "カードでお支払いですか？", "reading": "Kaado de o-shiharai desu ka?", "en": "Will you pay by card?" },
+        { "speaker": "A", "ja": "現金でお願いします。", "reading": "Genkin de onegai shimasu.", "en": "Cash, please." },
+        { "speaker": "B", "ja": "ありがとうございます。またお越しくださいませ。", "reading": "Arigatou gozaimasu. Mata o-koshi kudasaimase.", "en": "Thank you. Please come again." },
+        { "speaker": "A", "ja": "ありがとう。さようなら。", "reading": "Arigatou. Sayounara.", "en": "Thanks. Goodbye." }
+      ]
+    },
+    {
+      "id": "dlg-hotel",
+      "title": "Checking in at a hotel",
+      "cat": "hotel",
+      "roles": { "A": "You (guest)", "B": "Reception" },
+      "lines": [
+        { "speaker": "B", "ja": "いらっしゃいませ。ご予約のお名前は？", "reading": "Irasshaimase. Go-yoyaku no o-namae wa?", "en": "Welcome. What name is the reservation under?" },
+        { "speaker": "A", "ja": "スミスです。", "reading": "Sumisu desu.", "en": "Smith." },
+        { "speaker": "B", "ja": "パスポートをお願いします。", "reading": "Pasupooto wo onegai shimasu.", "en": "Your passport, please." },
+        { "speaker": "A", "ja": "はい、どうぞ。", "reading": "Hai, douzo.", "en": "Here you are." },
+        { "speaker": "B", "ja": "お部屋は三階の三〇二号室です。", "reading": "O-heya wa san-gai no san-maru-ni gou-shitsu desu.", "en": "Your room is 302 on the third floor." },
+        { "speaker": "A", "ja": "Wi-Fiのパスワードは何ですか？", "reading": "Wai-fai no pasuwaado wa nan desu ka?", "en": "What's the Wi-Fi password?" },
+        { "speaker": "B", "ja": "こちらに書いてあります。", "reading": "Kochira ni kaite arimasu.", "en": "It's written here." },
+        { "speaker": "A", "ja": "朝ご飯は何時からですか？", "reading": "Asa-gohan wa nan-ji kara desu ka?", "en": "What time does breakfast start?" },
+        { "speaker": "B", "ja": "七時から十時までです。", "reading": "Shichi-ji kara juu-ji made desu.", "en": "From 7am to 10am." },
+        { "speaker": "A", "ja": "チェックアウトは何時ですか？", "reading": "Chekku-auto wa nan-ji desu ka?", "en": "What time is check-out?" },
+        { "speaker": "B", "ja": "十一時です。ごゆっくりどうぞ。", "reading": "Juu-ichi-ji desu. Go-yukkuri douzo.", "en": "11am. Enjoy your stay." },
+        { "speaker": "A", "ja": "ありがとうございます。", "reading": "Arigatou gozaimasu.", "en": "Thank you very much." }
+      ]
+    },
+    {
+      "id": "dlg-directions",
+      "title": "Asking for directions",
+      "cat": "directions",
+      "roles": { "A": "You (tourist)", "B": "Passer-by" },
+      "lines": [
+        { "speaker": "A", "ja": "すみません、ちょっといいですか？", "reading": "Sumimasen, chotto ii desu ka?", "en": "Excuse me, do you have a moment?" },
+        { "speaker": "B", "ja": "はい、何ですか？", "reading": "Hai, nan desu ka?", "en": "Yes, what is it?" },
+        { "speaker": "A", "ja": "駅はどこですか？", "reading": "Eki wa doko desu ka?", "en": "Where is the station?" },
+        { "speaker": "B", "ja": "まっすぐ行ってください。", "reading": "Massugu itte kudasai.", "en": "Go straight ahead." },
+        { "speaker": "A", "ja": "どのくらいかかりますか？", "reading": "Dono kurai kakarimasu ka?", "en": "How long does it take?" },
+        { "speaker": "B", "ja": "歩いて五分ぐらいです。", "reading": "Aruite go-fun gurai desu.", "en": "About 5 minutes on foot." },
+        { "speaker": "A", "ja": "右ですか、左ですか？", "reading": "Migi desu ka, hidari desu ka?", "en": "On the right, or the left?" },
+        { "speaker": "B", "ja": "二つ目の信号を左に曲がってください。", "reading": "Futatsu-me no shingou wo hidari ni magatte kudasai.", "en": "Turn left at the second traffic light." },
+        { "speaker": "A", "ja": "コンビニの近くですか？", "reading": "Konbini no chikaku desu ka?", "en": "Is it near the convenience store?" },
+        { "speaker": "B", "ja": "はい、コンビニの隣です。", "reading": "Hai, konbini no tonari desu.", "en": "Yes, it's next to the convenience store." },
+        { "speaker": "A", "ja": "どうもありがとうございます。", "reading": "Doumo arigatou gozaimasu.", "en": "Thank you very much." },
+        { "speaker": "B", "ja": "どういたしまして。", "reading": "Dou itashimashite.", "en": "You're welcome." }
+      ]
+    },
+    {
+      "id": "dlg-taxi",
+      "title": "Taking a taxi",
+      "cat": "directions",
+      "roles": { "A": "You (passenger)", "B": "Taxi driver" },
+      "lines": [
+        { "speaker": "B", "ja": "どちらまでですか？", "reading": "Dochira made desu ka?", "en": "Where to?" },
+        { "speaker": "A", "ja": "東京駅までお願いします。", "reading": "Toukyou-eki made onegai shimasu.", "en": "Tokyo Station, please." },
+        { "speaker": "B", "ja": "かしこまりました。", "reading": "Kashikomarimashita.", "en": "Certainly." },
+        { "speaker": "A", "ja": "どのくらいかかりますか？", "reading": "Dono kurai kakarimasu ka?", "en": "How long will it take?" },
+        { "speaker": "B", "ja": "二十分ぐらいです。", "reading": "Ni-juppun gurai desu.", "en": "About 20 minutes." },
+        { "speaker": "A", "ja": "道は混んでいますか？", "reading": "Michi wa konde imasu ka?", "en": "Is the road busy?" },
+        { "speaker": "B", "ja": "今は少し混んでいます。", "reading": "Ima wa sukoshi konde imasu.", "en": "It's a bit busy now." },
+        { "speaker": "A", "ja": "急いでいます。", "reading": "Isoide imasu.", "en": "I'm in a hurry." },
+        { "speaker": "B", "ja": "分かりました。近道で行きます。", "reading": "Wakarimashita. Chikamichi de ikimasu.", "en": "Understood. I'll take a shortcut." },
+        { "speaker": "A", "ja": "ここで止めてください。", "reading": "Koko de tomete kudasai.", "en": "Please stop here." },
+        { "speaker": "B", "ja": "二千五百円です。", "reading": "Ni-sen-go-hyaku-en desu.", "en": "That's 2,500 yen." },
+        { "speaker": "A", "ja": "レシートをお願いします。", "reading": "Reshiito wo onegai shimasu.", "en": "Receipt, please." }
+      ]
+    }
   ]
 }

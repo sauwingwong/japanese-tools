@@ -81,14 +81,32 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
   -webkit-backdrop-filter:blur(18px);
   border-top:1px solid rgba(0,0,0,0.08);
   padding-bottom: env(safe-area-inset-bottom);
-  padding-left: max(22px, env(safe-area-inset-left));
-  padding-right: max(22px, env(safe-area-inset-right));
+  padding-left: max(30px, env(safe-area-inset-left));
+  padding-right: max(30px, env(safe-area-inset-right));
   grid-template-columns: repeat(7, 1fr); font-size:0.68rem;
 }
 @media(max-width:600px){ .tabbar-mobile { display:grid; } }
 .tabi { background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 0 6px; color:#666; text-decoration:none; font:inherit; font-size:0.65rem; cursor:pointer; }
 .tabi-ico { font-size:1.3rem; line-height:1; }
 .tabi.active { color:#6a1b9a; font-weight:600; }
+
+/* Desktop horizontal tab bar (≥900px). See CLAUDE.md §nav. */
+.nav-desktop { display: none; }
+@media (min-width: 900px) {
+  .nav-desktop {
+    display: flex; gap: 6px; padding: 10px 30px;
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    justify-content: center; flex-wrap: wrap;
+  }
+  .nav-desktop a {
+    padding: 8px 14px; border-radius: 8px;
+    color: #374151; text-decoration: none; font-weight: 600; font-size: 0.88rem;
+  }
+  .nav-desktop a.active { background: #6a1b9a; color: #fff; }
+  .nav-desktop a:hover { background: #f3f4f6; }
+  .nav-desktop a.active:hover { background: #4a148c; }
+  .nav-tabs, .tabbar-mobile { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -98,6 +116,16 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
   <h1>🈁 Kanji Reading</h1>
   <a href="#" id="reset-btn" title="Reset SRS">↺</a>
 </header>
+
+<nav class="nav-desktop">
+  <a href="/">🏠 Home</a>
+  <a href="/phoneme-trainer.html">🗣️ Phoneme</a>
+  <a href="/grammar.html">🧠 Grammar</a>
+  <a class="active" href="/kanji.html">🈁 Kanji</a>
+  <a href="/listening-quiz.html">🎧 Vocab</a>
+  <a href="/dictation.html">✍️ Dictation</a>
+  <a href="/phrases.html">🗺️ Phrases</a>
+</nav>
 
 <main>
   <div class="bar-wrap">

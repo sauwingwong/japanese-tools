@@ -137,12 +137,31 @@ is 0 in portrait, so use `max()`:
 
 ```css
 .nav-tabs, .tabbar-mobile {
-  padding-left:  max(22px, env(safe-area-inset-left));
-  padding-right: max(22px, env(safe-area-inset-right));
+  padding-left:  max(30px, env(safe-area-inset-left));
+  padding-right: max(30px, env(safe-area-inset-right));
 }
 ```
 
-22px was the value that finally got all 7 tabs clear on iPhone.
+30px was the floor that finally got all 7 tabs clear on iPhone.
+(Was 22px; bumped after the user still found the edges too close.)
+
+## Nav bars — desktop top + mobile bottom
+
+Two nav strips per tool page; same 7 links, same order. Classes
+differ for historical reasons but are unified via media queries.
+
+- `.nav-desktop` — horizontal top bar under the red header. Hidden
+  below 900 px, shown at ≥900 px. (900 px breakpoint chosen so
+  iPad portrait ≈820 px still gets the mobile bar, while split
+  landscape ≥1180 px gets the desktop bar.)
+- `.nav-tabs` / `.tabbar-mobile` — fixed bottom grid. Shown at
+  <900 px, hidden at ≥900 px via
+  `{ display: none !important; }` inside the desktop media block.
+
+Nav-link order is fixed; see any tool page for the canonical markup.
+Changing any nav link currently requires editing **7 HTML files**.
+See "Known deferred work" — shared-nav extraction is the next
+change that should precede another nav edit.
 
 ## Japanese grader normalisation
 
