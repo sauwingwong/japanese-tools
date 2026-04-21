@@ -1112,10 +1112,12 @@ function srCompare(expectedHiragana, heard, expectedKanji) {
   // Match against hiragana form
   if (h === e || h.includes(e) || e.includes(h)) return 'exact';
 
-  // Match against kanji form — recognizer often returns kanji (e.g. 話す for はなす)
+  // Match against kanji form — recognizer often returns kanji (e.g. 話す for はなす).
+  // Run normalizeJaDigits on both sides so "2人" matches "二人" (STT often
+  // digitises spoken number-words).
   if (expectedKanji) {
-    const k = expectedKanji.trim().replace(/[。、！？!?\s]/g, '');
-    const hRaw = heard.trim().replace(/[。、！？!?\s]/g, '');
+    const k = normalizeJaDigits(expectedKanji.trim().replace(/[。、！？!?\s]/g, ''));
+    const hRaw = normalizeJaDigits(heard.trim().replace(/[。、！？!?\s]/g, ''));
     if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
   }
 

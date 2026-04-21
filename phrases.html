@@ -151,7 +151,8 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
 .dlg-bubble .b-speaker { font-size: 0.7rem; font-weight: 600; color: #666; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
 .dlg-bubble.you .b-speaker { color: #bf360c; }
 .dlg-bubble .b-ja { font-weight: 600; }
-.dlg-bubble .b-reading { font-size: 0.72rem; color: #888; margin-top: 2px; }
+.dlg-bubble .b-reading { font-size: 0.82rem; color: #666; margin-top: 2px; }
+.dlg-bubble .b-romaji  { font-size: 0.7rem; color: #999; margin-top: 1px; font-style: italic; }
 .dlg-bubble .b-en { font-size: 0.72rem; color: #888; font-style: italic; margin-top: 2px; }
 .dlg-bubble .b-actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 .dlg-bubble .b-result:empty { display: none; }
@@ -650,8 +651,8 @@ function srCompare(expectedHiragana, heard, expectedKanji) {
   const h = cleanJP(heard);
   if (h === e || h.includes(e) || e.includes(h)) return 'exact';
   if (expectedKanji) {
-    const k = String(expectedKanji).trim().replace(/[。、！？!?\s]/g, '');
-    const hRaw = String(heard).trim().replace(/[。、！？!?\s]/g, '');
+    const k = normalizeJaDigits(String(expectedKanji).trim().replace(/[。、！？!?\s]/g, ''));
+    const hRaw = normalizeJaDigits(String(heard).trim().replace(/[。、！？!?\s]/g, ''));
     if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
   }
   let overlap = 0;
@@ -892,7 +893,8 @@ function renderDialoguePlay() {
     bub.innerHTML =
       `<div class="b-speaker">${label}</div>` +
       `<div class="b-ja" lang="ja">${escapeHtml(line.ja)}</div>` +
-      `<div class="b-reading">${escapeHtml(line.reading || '')}</div>` +
+      (line.reading ? `<div class="b-reading" lang="ja">${escapeHtml(line.reading)}</div>` : '') +
+      (line.romaji ? `<div class="b-romaji">${escapeHtml(line.romaji)}</div>` : '') +
       `<div class="b-en">${escapeHtml(line.en || '')}</div>` +
       `<div class="b-actions" id="b-actions-${idx}"></div>` +
       `<div class="b-result" id="b-result-${idx}"></div>`;
@@ -937,12 +939,9 @@ function lcsLen(a, b) {
   return { dp, len: dp[n][m] };
 }
 
-function jaDiffHtml(expectedHiragana, heardRaw) {
-  const exp = cleanJP(expectedHiragana);
-  const heard = cleanJP(heardRaw);
-  if (!exp.length) return { html: escapeHtml(heardRaw || ''), pct: 0 };
+function jaDiffHtmlOne(exp, heard) {
+  if (!exp.length) return { html: '', pct: 0 };
   const { dp, len } = lcsLen(exp, heard);
-  // Backtrack to mark which expected chars matched.
   const marks = new Array(exp.length).fill(false);
   if (dp) {
     let i = exp.length, j = heard.length;
@@ -955,12 +954,52 @@ function jaDiffHtml(expectedHiragana, heardRaw) {
   let html = '';
   for (let k = 0; k < exp.length; k++) {
     const ch = escapeHtml(exp[k]);
-    html += marks[k]
-      ? `<span class="diff-ok">${ch}</span>`
-      : `<s class="diff-miss">${ch}</s>`;
+    html += marks[k] ? `<span class="diff-ok">${ch}</span>` : `<s class="diff-miss">${ch}</s>`;
   }
-  const pct = Math.round(100 * len / exp.length);
-  return { html, pct };
+  return { html, pct: Math.round(100 * len / exp.length) };
+}
+
+// Robust best-of grader: tries multiple expected forms (hiragana reading,
+// digit-normalised ja, raw ja) and compares against multiple heard forms
+// (cleanJP hiragana, raw stripped, digit-normalised stripped). Returns the
+// candidate with the highest LCS pct. Survives romaji data, kanji STT,
+// digit STT (e.g. "2人" for ふたり) — all three match as long as one path
+// aligns.
+function hasLatin(s) { return /[A-Za-z]/.test(s || ''); }
+
+function bestGrade(line, heardRaw) {
+  const stripPunct = s => String(s || '').replace(/[。、！？!?\s]/g, '');
+
+  // Expected candidates.
+  const exps = [];
+  if (line.reading && !hasLatin(line.reading)) exps.push(cleanJP(line.reading));
+  if (line.ja) {
+    // Digit-normalised hiragana form of ja (二 → に, 2 → に, 月→...).
+    exps.push(cleanJP(line.ja));
+    // Raw stripped ja (for exact kanji matching when STT returns kanji).
+    exps.push(stripPunct(line.ja));
+    // Digit-normalised kanji form (2 → に keeps kanji intact otherwise).
+    exps.push(normalizeJaDigits(stripPunct(line.ja)));
+  }
+
+  // Heard candidates.
+  const heards = [
+    cleanJP(heardRaw),
+    stripPunct(heardRaw),
+    normalizeJaDigits(stripPunct(heardRaw)),
+  ];
+
+  let best = { pct: -1, html: escapeHtml(heardRaw || ''), expRaw: '' };
+  for (const exp of exps) {
+    if (!exp) continue;
+    for (const heard of heards) {
+      if (!heard) continue;
+      const d = jaDiffHtmlOne(exp, heard);
+      if (d.pct > best.pct) best = { pct: d.pct, html: d.html, expRaw: exp };
+    }
+  }
+  if (best.pct < 0) best.pct = 0;
+  return best;
 }
 
 async function dlgSpeak(line, idx) {
@@ -974,12 +1013,12 @@ async function dlgSpeak(line, idx) {
   const reset = () => { btn.textContent = '🎤 Speak'; btn.disabled = false; };
 
   const render = (alts) => {
-    // Pick the alt with the highest char-diff pct.
+    // Try each STT alternative against all expected candidates; take best.
     let best = { pct: -1, heard: alts[0] || '', html: '' };
     for (const a of alts) {
       if (!a) continue;
-      const d = jaDiffHtml(line.reading || line.ja, a);
-      if (d.pct > best.pct) best = { pct: d.pct, heard: a, html: d.html };
+      const g = bestGrade(line, a);
+      if (g.pct > best.pct) best = { pct: g.pct, heard: a, html: g.html };
     }
     const pct = Math.max(0, best.pct);
     const pctCls = pct >= 85 ? 'pct-hi' : pct >= 60 ? 'pct-mid' : 'pct-lo';
