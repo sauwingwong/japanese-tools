@@ -594,6 +594,19 @@ const JA_DIGIT_TABLE = (function () {
   for (let i = 1; i <= 12; i++) push(i + '月', kanjiDigit[i] + '月', months[i-1]);
   for (let i = 1; i <= 12; i++) push(i + '時', kanjiDigit[i] + '時', hours[i-1]);
   for (let i = 1; i <= 31; i++) push(i + '日', kanjiDigit[i] + '日', days[i-1]);
+  // Standalone digits (when STT returns "0" / "3" instead of ゼロ / さん).
+  // The longest-first sort below puts counter forms ("6月", 2 chars) ahead
+  // of these (1 char), so "6月" → ろくがつ, not ろく+月.
+  const standaloneDigits = {
+    0: 'ぜろ', 1: 'いち', 2: 'に', 3: 'さん', 4: 'よん',
+    5: 'ご', 6: 'ろく', 7: 'なな', 8: 'はち', 9: 'きゅう', 10: 'じゅう'
+  };
+  for (const [n, reading] of Object.entries(standaloneDigits)) {
+    table.push([String(n), reading]);
+    if (kanjiDigit[n]) table.push([kanjiDigit[n], reading]);
+  }
+  // 零 (kanji zero, rare but possible).
+  table.push(['零', 'ぜろ']);
   // Longest-token-first replacement prevents "1月" eating from "12月".
   table.sort((a, b) => b[0].length - a[0].length);
   return table;
