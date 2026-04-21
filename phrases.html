@@ -142,17 +142,38 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
 .dlg-chat {
   background: #fff; border-radius: 14px; padding: 14px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-  display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
-  max-height: 50vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;
 }
-.dlg-bubble { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 0.95rem; line-height: 1.4; }
+.dlg-chat-free { max-height: none; overflow: visible; }
+.dlg-bubble { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 0.95rem; line-height: 1.4; }
 .dlg-bubble.partner { background: #f1f3f4; color: #212121; align-self: flex-start; border-top-left-radius: 4px; }
 .dlg-bubble.you     { background: #ffe0b2; color: #212121; align-self: flex-end; border-top-right-radius: 4px; }
+.dlg-bubble .b-speaker { font-size: 0.7rem; font-weight: 600; color: #666; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.dlg-bubble.you .b-speaker { color: #bf360c; }
 .dlg-bubble .b-ja { font-weight: 600; }
 .dlg-bubble .b-reading { font-size: 0.72rem; color: #888; margin-top: 2px; }
 .dlg-bubble .b-en { font-size: 0.72rem; color: #888; font-style: italic; margin-top: 2px; }
-.dlg-bubble.hidden .b-ja,
-.dlg-bubble.hidden .b-reading { filter: blur(6px); user-select: none; }
+.dlg-bubble .b-actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.dlg-bubble .b-result:empty { display: none; }
+.dlg-bubble .b-result { margin-top: 8px; font-size: 0.82rem; }
+
+.line-btn {
+  border: none; border-radius: 16px; padding: 5px 12px;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.line-play  { background: rgba(255,255,255,0.7); color: #333; }
+.line-hear  { background: rgba(255,255,255,0.7); color: #333; }
+.line-speak { background: #e65100; color: #fff; }
+
+.diff-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.diff-pct { font-weight: 700; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; }
+.diff-pct.pct-hi  { background: #e8f5e9; color: #2e7d32; }
+.diff-pct.pct-mid { background: #fff3e0; color: #ef6c00; }
+.diff-pct.pct-lo  { background: #ffebee; color: #c62828; }
+.diff-heard { color: #666; font-size: 0.78rem; }
+.diff-expected { margin-top: 4px; font-family: 'Hiragino Sans','Hiragino Kaku Gothic ProN',sans-serif; font-size: 0.95rem; letter-spacing: 0.02em; }
+.diff-ok { color: #1b5e20; }
+.diff-miss { color: #c62828; text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.75; }
 
 .dlg-turn-panel {
   background: #fff; border-radius: 14px; padding: 18px 16px;
@@ -767,12 +788,13 @@ speakBtn.addEventListener('click', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// DIALOGUES — role-play mode
+// DIALOGUES — role-play mode (free-flow: all lines inline,
+// per-line Hear/Speak, char-level diff feedback)
 // ═══════════════════════════════════════════════════════════════════════
-let dlgState = null; // { dialogue, myRole, idx, revealedIdx:Set }
+let dlgCurrent = null; // { dialogue, myRole }
 
 function renderDialogues() {
-  dlgState = null;
+  dlgCurrent = null;
   const view = document.getElementById('dialogues-view');
   view.innerHTML = '';
   if (!DIALOGUES.length) {
@@ -781,7 +803,7 @@ function renderDialogues() {
   }
   const intro = document.createElement('p');
   intro.style.cssText = 'font-size:0.85rem; color:#666; margin-bottom:12px;';
-  intro.textContent = 'Pick a scenario, then choose which role to play. The app speaks the other person\'s lines — you speak yours.';
+  intro.textContent = 'Pick a scenario, then choose which role to play. The app speaks the other person\'s lines — you speak yours, any line, any order.';
   view.appendChild(intro);
   DIALOGUES.forEach(d => {
     const card = document.createElement('div');
@@ -823,133 +845,127 @@ function showRolePicker(dialogue) {
 }
 
 function startDialogue(dialogue, myRole) {
-  dlgState = { dialogue, myRole, idx: 0, revealedIdx: new Set() };
+  dlgCurrent = { dialogue, myRole };
   renderDialoguePlay();
-  // Auto-play partner's first line if they start.
-  const first = dialogue.lines[0];
-  if (first && first.speaker !== myRole) {
-    setTimeout(() => speak(first.ja), 200);
-  }
 }
 
 function renderDialoguePlay() {
   const view = document.getElementById('dialogues-view');
   view.innerHTML = '';
-  const { dialogue, myRole, idx } = dlgState;
+  const { dialogue, myRole } = dlgCurrent;
 
+  // Top controls — back + role switcher
+  const topbar = document.createElement('div');
+  topbar.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;';
   const back = document.createElement('button');
   back.className = 'dlg-back';
-  back.textContent = '‹ Back to dialogues';
+  back.textContent = '‹ Back';
   back.onclick = renderDialogues;
-  view.appendChild(back);
+  topbar.appendChild(back);
+
+  const swap = document.createElement('button');
+  swap.className = 'dlg-back';
+  swap.style.cssText = 'font-size:0.82rem;';
+  swap.textContent = `⇄ Play as ${myRole === 'A' ? 'B' : 'A'}`;
+  swap.onclick = () => startDialogue(dialogue, myRole === 'A' ? 'B' : 'A');
+  topbar.appendChild(swap);
+  view.appendChild(topbar);
 
   // Title
   const title = document.createElement('div');
-  title.style.cssText = 'text-align:center; font-weight:700; font-size:1rem; color:#212121; margin-bottom:4px;';
+  title.style.cssText = 'text-align:center; font-weight:700; font-size:1rem; color:#212121; margin-bottom:2px;';
   title.textContent = dialogue.title;
   view.appendChild(title);
   const roleHint = document.createElement('div');
-  roleHint.style.cssText = 'text-align:center; font-size:0.78rem; color:#888; margin-bottom:8px;';
+  roleHint.style.cssText = 'text-align:center; font-size:0.78rem; color:#888; margin-bottom:12px;';
   roleHint.textContent = `You: ${dialogue.roles[myRole]}`;
   view.appendChild(roleHint);
 
-  // Progress dots
-  const prog = document.createElement('div');
-  prog.className = 'dlg-progress';
-  dialogue.lines.forEach((_, i) => {
-    const dot = document.createElement('span');
-    dot.className = 'dot' + (i < idx ? ' done' : (i === idx ? ' current' : ''));
-    prog.appendChild(dot);
-  });
-  view.appendChild(prog);
-
-  // Finish screen
-  if (idx >= dialogue.lines.length) {
-    const fin = document.createElement('div');
-    fin.className = 'dlg-finish';
-    fin.innerHTML =
-      `<h3>🎉 Dialogue complete!</h3>` +
-      `<p>Nice work. Want another round, or pick a new scenario?</p>` +
-      `<div class="dlg-actions">` +
-        `<button class="dlg-next" id="dlg-again">↻ Practice again</button>` +
-        `<button class="dlg-reveal-btn" id="dlg-new">Pick another</button>` +
-      `</div>`;
-    view.appendChild(fin);
-    document.getElementById('dlg-again').onclick = () => startDialogue(dialogue, myRole);
-    document.getElementById('dlg-new').onclick = renderDialogues;
-    return;
-  }
-
-  // Chat transcript up to and including current
+  // All lines inline (no gating).
   const chat = document.createElement('div');
-  chat.className = 'dlg-chat';
-  for (let i = 0; i <= idx; i++) {
-    const line = dialogue.lines[i];
+  chat.className = 'dlg-chat dlg-chat-free';
+  dialogue.lines.forEach((line, idx) => {
     const isYou = line.speaker === myRole;
-    const isCurrent = i === idx;
-    const showContent = !isCurrent || !isYou || dlgState.revealedIdx.has(i);
     const bub = document.createElement('div');
-    bub.className = 'dlg-bubble ' + (isYou ? 'you' : 'partner') + (showContent ? '' : ' hidden');
+    bub.className = 'dlg-bubble ' + (isYou ? 'you' : 'partner');
+    const label = isYou ? `🎤 You (${dialogue.roles[myRole]})` : escapeHtml(dialogue.roles[line.speaker] || line.speaker);
     bub.innerHTML =
+      `<div class="b-speaker">${label}</div>` +
       `<div class="b-ja" lang="ja">${escapeHtml(line.ja)}</div>` +
       `<div class="b-reading">${escapeHtml(line.reading || '')}</div>` +
-      `<div class="b-en">${escapeHtml(line.en || '')}</div>`;
+      `<div class="b-en">${escapeHtml(line.en || '')}</div>` +
+      `<div class="b-actions" id="b-actions-${idx}"></div>` +
+      `<div class="b-result" id="b-result-${idx}"></div>`;
     chat.appendChild(bub);
-  }
+
+    const actions = bub.querySelector(`#b-actions-${idx}`);
+    if (isYou) {
+      const hear = document.createElement('button');
+      hear.className = 'line-btn line-hear';
+      hear.textContent = '🔊 Hear';
+      hear.onclick = () => speak(line.ja);
+      actions.appendChild(hear);
+      const sp = document.createElement('button');
+      sp.className = 'line-btn line-speak';
+      sp.id = `b-speak-${idx}`;
+      sp.textContent = '🎤 Speak';
+      sp.onclick = () => dlgSpeak(line, idx);
+      actions.appendChild(sp);
+    } else {
+      const play = document.createElement('button');
+      play.className = 'line-btn line-play';
+      play.textContent = '🔊 Play';
+      play.onclick = () => speak(line.ja);
+      actions.appendChild(play);
+    }
+  });
   view.appendChild(chat);
-  // Scroll chat to bottom.
-  setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 0);
-
-  // Turn panel
-  const line = dialogue.lines[idx];
-  const isYourTurn = line.speaker === myRole;
-  const panel = document.createElement('div');
-  panel.className = 'dlg-turn-panel';
-  if (isYourTurn) {
-    panel.innerHTML =
-      `<div class="turn-label">🎤 Your turn</div>` +
-      `<div class="turn-en">${escapeHtml(line.en || '')}</div>` +
-      `<div class="dlg-actions">` +
-        `<button class="dlg-play-btn" id="dlg-speak">🎤 Speak</button>` +
-        `<button class="dlg-reveal-btn" id="dlg-reveal">👁 Reveal</button>` +
-        `<button class="dlg-next" id="dlg-next">Next ▶</button>` +
-      `</div>` +
-      `<div class="dlg-turn-result" id="dlg-result"></div>`;
-  } else {
-    panel.innerHTML =
-      `<div class="turn-label partner">🔊 ${escapeHtml(dialogue.roles[line.speaker])} says</div>` +
-      `<div class="turn-en" style="font-size:0.88rem; color:#888;">(listen, then tap Next)</div>` +
-      `<div class="dlg-actions">` +
-        `<button class="dlg-play-btn" id="dlg-replay">🔊 Replay</button>` +
-        `<button class="dlg-next" id="dlg-next">Next ▶</button>` +
-      `</div>`;
-  }
-  view.appendChild(panel);
-
-  // Wire up actions
-  const nextBtn = document.getElementById('dlg-next');
-  nextBtn.onclick = () => {
-    dlgState.idx++;
-    renderDialoguePlay();
-    // Auto-play partner's line if next is partner.
-    const nxt = dialogue.lines[dlgState.idx];
-    if (nxt && nxt.speaker !== myRole) setTimeout(() => speak(nxt.ja), 200);
-  };
-
-  if (isYourTurn) {
-    document.getElementById('dlg-reveal').onclick = () => {
-      dlgState.revealedIdx.add(idx);
-      renderDialoguePlay();
-    };
-    document.getElementById('dlg-speak').onclick = () => dlgSpeak(line);
-  } else {
-    document.getElementById('dlg-replay').onclick = () => speak(line.ja);
-  }
 }
 
-async function dlgSpeak(line) {
-  const btn = document.getElementById('dlg-speak');
-  const result = document.getElementById('dlg-result');
+// ── Char-level diff (Japanese-aware) ──
+// LCS-based alignment of expected hiragana vs heard hiragana.
+// Expected chars that didn't match are struck through; score = LCS/len(expected).
+function lcsLen(a, b) {
+  const n = a.length, m = b.length;
+  if (!n || !m) return { dp: null, len: 0 };
+  const dp = Array.from({ length: n + 1 }, () => new Int16Array(m + 1));
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return { dp, len: dp[n][m] };
+}
+
+function jaDiffHtml(expectedHiragana, heardRaw) {
+  const exp = cleanJP(expectedHiragana);
+  const heard = cleanJP(heardRaw);
+  if (!exp.length) return { html: escapeHtml(heardRaw || ''), pct: 0 };
+  const { dp, len } = lcsLen(exp, heard);
+  // Backtrack to mark which expected chars matched.
+  const marks = new Array(exp.length).fill(false);
+  if (dp) {
+    let i = exp.length, j = heard.length;
+    while (i > 0 && j > 0) {
+      if (exp[i - 1] === heard[j - 1]) { marks[i - 1] = true; i--; j--; }
+      else if (dp[i - 1][j] >= dp[i][j - 1]) { i--; }
+      else { j--; }
+    }
+  }
+  let html = '';
+  for (let k = 0; k < exp.length; k++) {
+    const ch = escapeHtml(exp[k]);
+    html += marks[k]
+      ? `<span class="diff-ok">${ch}</span>`
+      : `<s class="diff-miss">${ch}</s>`;
+  }
+  const pct = Math.round(100 * len / exp.length);
+  return { html, pct };
+}
+
+async function dlgSpeak(line, idx) {
+  const btn = document.getElementById(`b-speak-${idx}`);
+  const result = document.getElementById(`b-result-${idx}`);
   if (!btn || !result) return;
   btn.textContent = '🔴 Listening…';
   btn.disabled = true;
@@ -957,28 +973,26 @@ async function dlgSpeak(line) {
 
   const reset = () => { btn.textContent = '🎤 Speak'; btn.disabled = false; };
 
-  const grade = (alts) => {
-    const rank = ['exact', 'close', 'partial', 'miss'];
-    let best = 'miss';
-    let bestAlt = alts[0] || '';
+  const render = (alts) => {
+    // Pick the alt with the highest char-diff pct.
+    let best = { pct: -1, heard: alts[0] || '', html: '' };
     for (const a of alts) {
       if (!a) continue;
-      const lv = srCompare(line.reading || line.ja, a, line.ja);
-      if (rank.indexOf(lv) < rank.indexOf(best)) { best = lv; bestAlt = a; }
+      const d = jaDiffHtml(line.reading || line.ja, a);
+      if (d.pct > best.pct) best = { pct: d.pct, heard: a, html: d.html };
     }
-    const cfg = {
-      exact:   { cls: 'sr-exact',   icon: '✓', label: 'Great match!' },
-      close:   { cls: 'sr-close',   icon: '~', label: 'Close — nice!' },
-      partial: { cls: 'sr-partial', icon: '△', label: 'Partial — keep going' },
-      miss:    { cls: 'sr-miss',    icon: '✗', label: 'Not recognised' },
-    }[best];
+    const pct = Math.max(0, best.pct);
+    const pctCls = pct >= 85 ? 'pct-hi' : pct >= 60 ? 'pct-mid' : 'pct-lo';
     result.innerHTML =
-      `<span class="${cfg.cls}">${cfg.icon} ${cfg.label}</span>` +
-      ` <span style="color:#888; margin-left:6px;">Heard: <strong>${escapeHtml(bestAlt)}</strong></span>`;
+      `<div class="diff-line">` +
+        `<span class="diff-pct ${pctCls}">${pct}%</span>` +
+        `<span class="diff-heard">heard: ${escapeHtml(best.heard)}</span>` +
+      `</div>` +
+      `<div class="diff-expected" lang="ja">${best.html}</div>`;
   };
 
   if (!phraseRec && isMobile) {
-    try { grade([await recordAndTranscribe(4000)]); }
+    try { render([await recordAndTranscribe(4000)]); }
     catch (e) { result.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`; }
     reset();
     return;
@@ -993,11 +1007,11 @@ async function dlgSpeak(line) {
     if (usedFallback) return;
     usedFallback = true;
     result.innerHTML = '<span style="color:#888;">Retrying via server…</span>';
-    try { grade([await recordAndTranscribe(4000)]); }
+    try { render([await recordAndTranscribe(4000)]); }
     catch (e) { result.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`; }
     reset();
   }
-  phraseRec.onresult = ev => { grade(Array.from(ev.results[0]).map(r => r.transcript)); };
+  phraseRec.onresult = ev => { render(Array.from(ev.results[0]).map(r => r.transcript)); };
   phraseRec.onerror = ev => {
     if (ev.error === 'network') { serverFallback(); return; }
     result.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(ev.error)}</span>`;
