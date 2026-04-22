@@ -33,9 +33,29 @@
 // spamming errors.
 
 function emailOf(request) {
-  // CF Access injects this header on authenticated requests.
-  const email = request.headers.get('Cf-Access-Authenticated-User-Email');
-  return email && email.trim() ? email.trim().toLowerCase() : null;
+  // Prefer the plain header (only present when the CF Access app is
+  // configured with "Include Cf-Access-Authenticated-User-Email" on).
+  const plain = request.headers.get('Cf-Access-Authenticated-User-Email');
+  if (plain && plain.trim()) return plain.trim().toLowerCase();
+
+  // Fallback: decode the JWT that CF Access always injects. The payload
+  // is the second of three dot-separated base64url segments and always
+  // contains an `email` claim for authenticated users. We do NOT verify
+  // the signature — the JWT is injected server-side by CF Access on the
+  // Pages Function side of the Access boundary, so the request already
+  // passed auth to reach here. Extracting identity is safe.
+  const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
+  if (!jwt) return null;
+  try {
+    const payload = jwt.split('.')[1];
+    if (!payload) return null;
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    // Pad base64 to length % 4 == 0.
+    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+    const json = JSON.parse(atob(padded));
+    const email = json.email || null;
+    return email ? String(email).trim().toLowerCase() : null;
+  } catch { return null; }
 }
 
 function supabaseHeaders(env) {
