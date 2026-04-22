@@ -51,14 +51,31 @@ function missingEnv(env) {
 }
 
 export async function onRequestGet({ request, env }) {
+  const url = new URL(request.url);
+  const ns = url.searchParams.get('ns');
+
+  // Debug: ns=_debug echoes incoming headers so we can see exactly what
+  // CF Access (or its absence) is injecting. Safe to leave in — returns
+  // only non-sensitive metadata, never secrets.
+  if (ns === '_debug') {
+    const headers = {};
+    for (const [k, v] of request.headers.entries()) {
+      // Trim JWT to avoid logging the full token.
+      headers[k] = k.toLowerCase().includes('jwt') || k.toLowerCase().includes('auth')
+        ? (v ? v.slice(0, 20) + '…' : '') : v;
+    }
+    return Response.json({
+      headers,
+      hasSupabaseEnv: !missingEnv(env),
+    });
+  }
+
   if (missingEnv(env)) {
     return Response.json({ error: 'sync disabled' }, { status: 501 });
   }
   const email = emailOf(request);
   if (!email) return Response.json({ error: 'no identity' }, { status: 401 });
 
-  const url = new URL(request.url);
-  const ns = url.searchParams.get('ns');
   if (!ns) return Response.json({ error: 'missing ns' }, { status: 400 });
 
   const q = `${env.SUPABASE_URL}/rest/v1/srs_state`
