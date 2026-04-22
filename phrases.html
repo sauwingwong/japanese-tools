@@ -270,6 +270,7 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
   <div id="practice-view" style="display:none;">
     <div class="pstats">
       <span>Round <strong id="p-round">1</strong></span>
+      <span id="p-srs-badge"></span>
       <span><span id="p-pool-size">0</span> in deck</span>
     </div>
     <div id="practice-card">
@@ -308,6 +309,7 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
 
 <script type="module">
 import { createSRS } from '/js/srs.js';
+import ttsCache from '/js/tts-cache.js';
 
 // ── Data ──
 const data = await fetch('/data/phrases-tourist.json').then(r => r.json());
@@ -328,7 +330,15 @@ const CATEGORIES = [
 
 let activeCat = localStorage.getItem('phrases-tourist-category') || 'all';
 let mode = localStorage.getItem('phrases-tourist-mode') || 'browse';
-const srs = createSRS('phrases-tourist');
+const srs = createSRS('phrases-tourist', { sync: true });
+function renderPSrsBadge(ids) {
+  const el = document.getElementById('p-srs-badge');
+  if (!el || !ids || !ids.length) return;
+  try {
+    const s = srs.stats(ids);
+    el.textContent = `📅 ${s.due} · 🔁 ${s.learning} · 🆕 ${Math.max(0, s.newPerDay - s.newToday)}`;
+  } catch {}
+}
 
 // ── Audio ──
 let _ctx = null;
@@ -373,22 +383,29 @@ async function speak(text, opts) {
     if (opts.model) body.model = opts.model;
     let ctx = _getCtx();
     if (ctx.state !== 'running') { try { await ctx.resume(); } catch (e) {} }
-    const res = await fetch('/api/tts', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body), signal: ac.signal,
-    });
-    if (!res.ok) {
-      console.warn('TTS HTTP', res.status, '— falling back to speechSynthesis');
-      _speakFallback(text);
-      return;
-    }
-    const { audio } = await res.json();
+    const cacheKey = ttsCache.makeKey(text, { model: opts.model, voice: opts.voice });
+    let audio = null;
+    try { audio = await ttsCache.get(cacheKey); } catch {}
     if (ac.signal.aborted) return;
     if (!audio) {
-      console.warn('TTS returned no audio — falling back to speechSynthesis');
-      _speakFallback(text);
-      return;
+      const res = await fetch('/api/tts', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: ac.signal,
+      });
+      if (!res.ok) {
+        console.warn('TTS HTTP', res.status, '— falling back to speechSynthesis');
+        _speakFallback(text);
+        return;
+      }
+      ({ audio } = await res.json());
+      if (ac.signal.aborted) return;
+      if (!audio) {
+        console.warn('TTS returned no audio — falling back to speechSynthesis');
+        _speakFallback(text);
+        return;
+      }
+      ttsCache.put(cacheKey, audio, { model: opts.model, voice: opts.voice }).catch(() => {});
     }
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     const pcm = new Int16Array(bytes.buffer);
@@ -484,6 +501,7 @@ document.getElementById('p-round').textContent = roundN;
 function renderPractice() {
   const pool = filteredPool();
   document.getElementById('p-pool-size').textContent = pool.length;
+  renderPSrsBadge(pool.map(p => p.id));
   if (!pool.length) {
     document.getElementById('p-prompt').textContent = 'No phrases in this category.';
     document.getElementById('p-ja').style.visibility = 'hidden';

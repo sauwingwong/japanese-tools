@@ -551,6 +551,14 @@ main { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
 .shad-miss   { background: #ffebee; border: 1px solid #ef9a9a; }
 </style>
 
+<script type="module">
+// Expose ttsCache to the classic script below via window. Modules are
+// deferred, but we only gate on typeof inside speak(), so a very early
+// TTS press falls through to network — harmless.
+import ttsCache from '/js/tts-cache.js';
+window.ttsCache = ttsCache;
+</script>
+
 <script>
 // ═══════════════════════════════════════════════════════════════════════
 // SPEECH SYNTHESIS — auto-selects Gemini TTS (deployed) or Web Speech (local)
@@ -691,27 +699,41 @@ async function speakGemini(text, opts) {
 
   const ac = new AbortController();
   _currentAbort = ac;
+  const _model = opts && opts.model;
+  const _voice = opts && opts.voice;
+  const cacheKey = (typeof window.ttsCache !== 'undefined')
+    ? window.ttsCache.makeKey(text, { model: _model, voice: _voice }) : null;
   let data;
-  try {
-    const body = { text };
-    if (opts && opts.model) body.model = opts.model;
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ac.signal
-    });
-    const raw = await res.text();
-    try { data = JSON.parse(raw); }
-    catch { return speakWebSpeech(text, 0.9); }  // proxy returned HTML error page
-    if (!res.ok) return speakWebSpeech(text, 0.9);
-  } catch(e) {
-    if (e.name === 'AbortError') return; // superseded by a newer speak() call
-    return speakWebSpeech(text, 0.9);
+  if (cacheKey) {
+    try {
+      const cached = await window.ttsCache.get(cacheKey);
+      if (cached) data = { audio: cached };
+    } catch {}
+    if (ac.signal.aborted) return;
   }
-  if (ac.signal.aborted) return;
-  if (!data.audio) return speakWebSpeech(text, 0.9);
+  if (!data) {
+    try {
+      const body = { text };
+      if (_model) body.model = _model;
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ac.signal
+      });
+      const raw = await res.text();
+      try { data = JSON.parse(raw); }
+      catch { return speakWebSpeech(text, 0.9); }  // proxy returned HTML error page
+      if (!res.ok) return speakWebSpeech(text, 0.9);
+    } catch(e) {
+      if (e.name === 'AbortError') return; // superseded by a newer speak() call
+      return speakWebSpeech(text, 0.9);
+    }
+    if (ac.signal.aborted) return;
+    if (!data.audio) return speakWebSpeech(text, 0.9);
+    if (cacheKey) window.ttsCache.put(cacheKey, data.audio, { model: _model, voice: _voice }).catch(() => {});
+  }
 
   const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
   const buf = ctx.createBuffer(1, bytes.length / 2, 24000);

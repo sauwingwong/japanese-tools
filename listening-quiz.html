@@ -297,6 +297,7 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
         <span style="font-size:0.75rem; font-weight:400; color:#888; margin-left:6px;" id="sc-pct"></span>
       </div>
       <div class="score-sub">Words seen: <span id="sc-seen">0</span> / <span id="sc-pool">0</span></div>
+      <div class="score-sub" id="srs-badge" style="font-size:0.7rem; color:#666; margin-top:2px;"></div>
     </div>
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
       <span class="streak" id="sc-streak"></span>
@@ -416,6 +417,7 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 </script>
 <script type="module">
 import { createSRS } from '/js/srs.js';
+import ttsCache from '/js/tts-cache.js';
 const askGemini = window.askGemini;
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -536,25 +538,35 @@ async function speakGemini(text, opts) {
 
   const ac = new AbortController();
   _currentAbort = ac;
-  let data;
-  try {
-    const body = { text };
-    if (opts.model) body.model = opts.model;
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ac.signal
-    });
-    data = await res.json();
-  } catch(e) {
-    if (e.name === 'AbortError') return;
-    console.warn('Gemini TTS failed, falling back:', e);
-    speakWebSpeech(text, 0.9); return;
-  }
+  const cacheKey = ttsCache.makeKey(text, { model: opts.model, voice: opts.voice });
+  let audioB64 = null;
+  try { audioB64 = await ttsCache.get(cacheKey); } catch {}
   if (ac.signal.aborted) return;
-  if (!data.audio) { console.warn('No audio from Gemini TTS', data); speakWebSpeech(text, 0.9); return; }
+  let data;
+  if (audioB64) {
+    data = { audio: audioB64 };
+  } else {
+    try {
+      const body = { text };
+      if (opts.model) body.model = opts.model;
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: ac.signal
+      });
+      data = await res.json();
+    } catch(e) {
+      if (e.name === 'AbortError') return;
+      console.warn('Gemini TTS failed, falling back:', e);
+      speakWebSpeech(text, 0.9); return;
+    }
+    if (ac.signal.aborted) return;
+    if (!data.audio) { console.warn('No audio from Gemini TTS', data); speakWebSpeech(text, 0.9); return; }
+    // Store for next time (fire-and-forget).
+    ttsCache.put(cacheKey, data.audio, { model: opts.model, voice: opts.voice }).catch(() => {});
+  }
   // Decode once; we may need to retry into a freshly-built ctx if the
   // current one was torn down while the fetch was in flight.
   const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
@@ -600,7 +612,15 @@ function speak(text, rate, opts) {
 // ═══════════════════════════════════════════════════════════════════════
 let pool = [];           // current filtered pool
 // Persistent SRS keyed by word.h (stable across category changes and reloads).
-const srs = createSRS('n5n4-vocab');
+const srs = createSRS('n5n4-vocab', { sync: true });
+function renderSrsBadge() {
+  const el = document.getElementById('srs-badge');
+  if (!el || !pool || !pool.length) return;
+  try {
+    const s = srs.stats(pool.map(w => w.h));
+    el.textContent = `📅 Due ${s.due} · 🔁 Learning ${s.learning} · 🆕 New ${Math.max(0, s.newPerDay - s.newToday)} · ✓ Known ${s.known}`;
+  } catch {}
+}
 let seenWords = new Set();
 let currentWord = null;
 let currentSentence = null; // {ja, en} from Gemini, populated on reveal
@@ -848,6 +868,7 @@ function updateScore() {
   document.getElementById('sc-pct').textContent = total ? `(${Math.round(correct/total*100)}%)` : '';
   document.getElementById('sc-streak').textContent = streak >= 3 ? `🔥 ${streak} streak!` : '';
   document.getElementById('progress-fill').style.width = `${(total / SESSION_LENGTH) * 100}%`;
+  renderSrsBadge();
 }
 
 // ═══════════════════════════════════════════════════════════════════════

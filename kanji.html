@@ -145,7 +145,7 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 
   <div class="card">
     <div class="score-bar">
-      <span>Known <strong id="stat-known">0</strong> · Learning <strong id="stat-learning">0</strong> · Struggling <strong id="stat-struggling">0</strong></span>
+      <span>Known <strong id="stat-known">0</strong> · Learning <strong id="stat-learning">0</strong> · Struggling <strong id="stat-struggling">0</strong> · Due <strong id="stat-due">0</strong> · New <strong id="stat-new">0</strong></span>
       <span>Score <strong id="score">0 / 0</strong></span>
     </div>
 
@@ -182,11 +182,12 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 </script>
 <script type="module">
 import { createSRS } from '/js/srs.js';
+import ttsCache from '/js/tts-cache.js';
 const askGemini = window.askGemini;
 
 const data = await fetch('/data/kanji-n5n4.json').then(r => r.json());
 const ALL = data.kanji;
-const srs = createSRS('n5n4-kanji');
+const srs = createSRS('n5n4-kanji', { sync: true });
 
 let level = localStorage.getItem('kanji-level') || 'all';
 let mode = localStorage.getItem('kanji-mode') || 'kanji-to-reading';
@@ -204,6 +205,10 @@ function updateStats() {
   document.getElementById('stat-known').textContent = s.known;
   document.getElementById('stat-learning').textContent = s.learning;
   document.getElementById('stat-struggling').textContent = s.struggling;
+  const dueEl = document.getElementById('stat-due');
+  const newEl = document.getElementById('stat-new');
+  if (dueEl) dueEl.textContent = s.due;
+  if (newEl) newEl.textContent = Math.max(0, s.newPerDay - s.newToday);
 }
 
 document.querySelectorAll('#filter-bar button').forEach(b => {
@@ -287,13 +292,19 @@ async function speak(text, opts) {
   try {
     const body = { text };
     if (opts.model) body.model = opts.model;
-    const res = await fetch('/api/tts', {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) return;
-    const { audio } = await res.json();
+    const cacheKey = ttsCache.makeKey(text, { model: opts.model, voice: opts.voice });
+    let audio = null;
+    try { audio = await ttsCache.get(cacheKey); } catch {}
+    if (!audio) {
+      const res = await fetch('/api/tts', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) return;
+      ({ audio } = await res.json());
+      if (audio) ttsCache.put(cacheKey, audio, { model: opts.model, voice: opts.voice }).catch(() => {});
+    }
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     let ctx = _getCtx();
     if (ctx.state !== 'running') { try { await ctx.resume(); } catch (e) {} }

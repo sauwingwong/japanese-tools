@@ -197,6 +197,7 @@ textarea#input:focus { outline:none; border-color:#00695c; }
 })(window);
 </script>
 <script type="module">
+import ttsCache from '/js/tts-cache.js';
 const askGemini = window.askGemini;
 
 const TOPICS = ['daily life', 'food', 'school', 'travel', 'work', 'shopping', 'weather', 'family', 'weekend plans', 'transport'];
@@ -262,13 +263,19 @@ async function speak(text, slow = false, opts = {}) {
     }
     const body = { text };
     if (opts.model) body.model = opts.model;
-    const res = await fetch('/api/tts', {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) return;
-    const { audio } = await res.json();
+    const cacheKey = ttsCache.makeKey(text, { model: opts.model, voice: opts.voice });
+    let audio = null;
+    try { audio = await ttsCache.get(cacheKey); } catch {}
+    if (!audio) {
+      const res = await fetch('/api/tts', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) return;
+      ({ audio } = await res.json());
+      if (audio) ttsCache.put(cacheKey, audio, { model: opts.model, voice: opts.voice }).catch(() => {});
+    }
     const bytes = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
     // Re-fetch ctx — it may have been torn down during the fetch.
     ctx = _getCtx();

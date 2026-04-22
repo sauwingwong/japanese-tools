@@ -5,9 +5,10 @@ iOS PWA hardening round shipped.
 
 ## What this repo is
 
-A Japanese-learning PWA (japanese.sauww.uk). Single learner, personal
-project. Hosted on Cloudflare Pages behind Cloudflare Access SSO,
-installed on the user's iPhone as a PWA.
+A Japanese-learning PWA (japanese.sauww.uk). **Two learners** (both
+gated via CF Access SSO; per-user state scoped by
+`Cf-Access-Authenticated-User-Email` header in `functions/api/srs.js`).
+Hosted on Cloudflare Pages, installed as a PWA on iPhone.
 
 ## Repo layout
 
@@ -31,11 +32,13 @@ japanese/
 │   ├── js/
 │   │   ├── gemini.js             ← shared /api/gemini client
 │   │   ├── quiz-card.js
-│   │   └── srs.js
+│   │   ├── srs.js                ← SM-2 scheduler + optional Supabase sync
+│   │   └── tts-cache.js          ← IndexedDB cache for /api/tts clips (LRU, 20MB)
 │   └── functions/api/            ← Cloudflare Pages Functions (serverless)
 │       ├── tts.js                ← TTS proxy (Cloud TTS + Gemini TTS)
 │       ├── stt.js                ← STT proxy (Gemini 2.0 Flash)
-│       └── gemini.js             ← text-gen proxy (Gemini 2.5 Flash)
+│       ├── gemini.js             ← text-gen proxy (Gemini 2.5 Flash)
+│       └── srs.js                ← SRS state sync proxy → Supabase
 ├── prompt-reference.md           ← product spec / learner notes
 └── CLAUDE.md                     ← this file
 ```
@@ -56,6 +59,8 @@ Only `output/` is a git repo — that's the deploy root. The parent
 |---|---|---|
 | `CLOUD_TTS_API_KEY` | `functions/api/tts.js` | Google Cloud TTS (Chirp3-HD-Leda) — default ▶ Play |
 | `GEMINI_API_KEY`    | `functions/api/tts.js`, `stt.js`, `gemini.js` | Gemini TTS (Rich), STT, text-gen |
+| `SUPABASE_URL`      | `functions/api/srs.js` | Supabase project URL, e.g. `https://<id>.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `functions/api/srs.js` | Supabase secret / service_role key. Server only — never shipped to client. |
 
 Never write values to disk or commits. If user says "the key is set"
 they mean they already pasted it into the CF Pages UI.
@@ -178,14 +183,45 @@ irregulars: しがつ=4月, しちがつ=7月, くがつ=9月, よじ=4時, し�
 
 When extending: add entries to `JA_DIGIT_TABLE` only, the rest flows.
 
+## SRS (Anki-style SM-2)
+
+`js/srs.js` runs a proper SM-2 scheduler, not weighted-random. Card
+shape: `{ ease, interval, due, reps, lapses, seen }`. Grading is
+auto-binary: correct → Good (1d → 6d → interval×ease), wrong → Again
+(reset, ease −0.2, floor 1.3). Picker priority: lapsed → due (oldest)
+→ new (budget-limited, default 20/day, key `srs/<ns>/new-count/YYYY-MM-DD`)
+→ fallback. Legacy bare-number weights migrate on first load.
+
+**Cross-device sync** is enabled per page with `createSRS(ns, { sync: true })`.
+The module pulls from `/api/srs?ns=…` on construction, LWW-compares vs
+the local `…/updated_at` stamp in localStorage, then debounces upserts
+(2 s) on every `recordResult`. `functions/api/srs.js` reads the CF
+Access email header and writes to Supabase table `srs_state(owner_email,
+namespace, data jsonb, updated_at, primary key(owner_email, namespace))`.
+If `SUPABASE_*` env vars are unset the function returns 501 and the
+client silently runs localStorage-only.
+
+## TTS client cache (IndexedDB)
+
+`js/tts-cache.js` caches `/api/tts` base64 PCM clips in IndexedDB
+(`ttscache/clips`, keyPath `key`, 20 MB LRU budget). Key is
+`${model}|${voice}|${text}` — same shape as the server-side edge cache
+hash input so logs align. 5 TTS pages (listening-quiz, phrases,
+dictation, grammar, kanji, phoneme-trainer) check the cache before
+hitting `/api/tts`; on miss they fetch then `put()`. Fail-soft: all IDB
+errors resolve null so cache breakage never kills audio. Offline
+replays work after a clip has been cached once.
+
 ## Known deferred work (don't let it rot)
 
 - **Shared-code extraction.** `_getCtx`, `speak`, `cleanJP`,
   `srCompare`, `recordAndTranscribe`, `JA_DIGIT_TABLE` are duplicated
-  across 5–7 HTML files. Target: `output/js/audio.js` and
-  `output/js/grade-ja.js`. Deferred after iOS hardening shipped — any
+  across 5–7 HTML files. Target: `js/audio.js` and
+  `js/grade-ja.js`. Deferred after iOS hardening shipped — any
   future change to these helpers has to touch every file until
-  extracted.
+  extracted. **Priority bumped** now that tts-cache wiring is the
+  6th copy-paste of the speak() fetch pattern — the next audio change
+  should start with the extraction.
 
 ## Session-start checklist
 
