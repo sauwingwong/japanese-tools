@@ -198,10 +198,6 @@ footer {
   <a class="tabi" href="/phrases.html"><span class="tabi-ico">🗺️</span>Phrases</a>
 </nav>
 
-<script>
-if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-  navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW fail:', err));
-}
-</script>
+<script src="/js/sw-register.js" defer></script>
 </body>
 </html>
