@@ -579,6 +579,7 @@ async function speakGemini(text, opts) {
     const src = activeCtx.createBufferSource();
     src.buffer = buf;
     src.connect(activeCtx.destination);
+    if (opts.rate && opts.rate !== 1) src.playbackRate.value = opts.rate;
     src.start();
     _currentSource = src;
   }
@@ -603,7 +604,8 @@ function speakWebSpeech(text, rate) {
 }
 
 function speak(text, rate, opts) {
-  if (USE_GEMINI) { speakGemini(text, opts); return; }
+  opts = opts || {};
+  if (USE_GEMINI) { speakGemini(text, { ...opts, rate }); return; }
   speakWebSpeech(text, rate);
 }
 
@@ -1128,7 +1130,42 @@ function cleanJP(str) {
   return katakanaToHiragana(normalizeJaDigits(str.trim()).replace(/[。、！？!?\s]/g, ''));
 }
 
-function srCompare(expectedHiragana, heard, expectedKanji) {
+// Look up the hiragana reading of arbitrary Japanese text via Gemini.
+// Used as a phonetic backstop when STT returns a homophone kanji form
+// (e.g. 始めまして where 初めまして/はじめまして was expected — all read
+// "hajimemashite" but compare textually as three different strings).
+// Cached per-input in localStorage so repeat failures don't re-spend
+// API calls. Returns null on any failure (caller falls through to miss).
+const READING_CACHE_KEY = 'reading-cache/v1';
+let _readingCache = null;
+function _loadReadingCache() {
+  if (_readingCache) return _readingCache;
+  try { _readingCache = JSON.parse(localStorage.getItem(READING_CACHE_KEY) || '{}'); }
+  catch { _readingCache = {}; }
+  return _readingCache;
+}
+function _saveReadingCache() {
+  try { localStorage.setItem(READING_CACHE_KEY, JSON.stringify(_readingCache || {})); } catch {}
+}
+async function resolveReading(text) {
+  if (!text) return null;
+  const cache = _loadReadingCache();
+  if (cache[text]) return cache[text];
+  try {
+    const reading = await askGemini(
+      `Output ONLY the hiragana reading of the following Japanese text. ` +
+      `No kanji, no katakana, no romaji, no punctuation, no explanation.\n\n${text}`,
+      { temperature: 0 }
+    );
+    const hira = String(reading || '').trim().replace(/[。、！？!?\s]/g, '');
+    if (!hira) return null;
+    cache[text] = hira;
+    _saveReadingCache();
+    return hira;
+  } catch { return null; }
+}
+
+async function srCompare(expectedHiragana, heard, expectedKanji) {
   const e = cleanJP(expectedHiragana);
   const h = cleanJP(heard);
 
@@ -1144,6 +1181,25 @@ function srCompare(expectedHiragana, heard, expectedKanji) {
     if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
   }
 
+  // Phonetic backstop: if heard still contains kanji after all textual
+  // checks have failed, resolve its reading via Gemini and retry. This
+  // catches homophone variants STT may have substituted (始 vs 初, etc.).
+  if (/[\u4E00-\u9FFF]/.test(heard)) {
+    const reading = await resolveReading(heard);
+    if (reading) {
+      const r = cleanJP(reading);
+      if (r === e || r.includes(e) || e.includes(r)) return 'exact';
+      // Fall through to char-overlap scoring using the reading below.
+      let overlapR = 0;
+      for (let i = 0; i < Math.min(e.length, r.length); i++) {
+        if (e[i] === r[i]) overlapR++;
+      }
+      const ratioR = overlapR / e.length;
+      if (ratioR >= 0.7) return 'close';
+      if (ratioR >= 0.4) return 'partial';
+    }
+  }
+
   // Character overlap on hiragana
   let overlap = 0;
   for (let i = 0; i < Math.min(e.length, h.length); i++) {
@@ -1155,11 +1211,11 @@ function srCompare(expectedHiragana, heard, expectedKanji) {
   return 'miss';
 }
 
-function quizShowResult(alternatives) {
+async function quizShowResult(alternatives) {
   let bestLevel = 'miss';
   let bestAlt = alternatives[0];
   for (const alt of alternatives) {
-    const lv = srCompare(currentWord.word.h, alt, currentWord.word.k);
+    const lv = await srCompare(currentWord.word.h, alt, currentWord.word.k);
     if (['exact','close','partial','miss'].indexOf(lv) <
         ['exact','close','partial','miss'].indexOf(bestLevel)) {
       bestLevel = lv; bestAlt = alt;
@@ -1186,7 +1242,7 @@ speakBtn.addEventListener('click', async () => {
   if (!quizRec && isMobile) {
     try {
       const transcript = await recordAndTranscribe(3000);
-      quizShowResult([transcript]);
+      await quizShowResult([transcript]);
     } catch (e) {
       speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${e.message || 'Mic error — check permissions'}</span>`;
     }
@@ -1208,7 +1264,7 @@ speakBtn.addEventListener('click', async () => {
     speakResult.innerHTML = '<span style="color:#888;">Google STT blocked — retrying via server…</span>';
     try {
       const transcript = await recordAndTranscribe(3000);
-      quizShowResult([transcript]);
+      await quizShowResult([transcript]);
     } catch (e) {
       speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${e.message || 'Mic error'}</span>`;
     }
@@ -1217,9 +1273,9 @@ speakBtn.addEventListener('click', async () => {
     speakBtn.disabled = false;
   }
 
-  quizRec.onresult = (ev) => {
+  quizRec.onresult = async (ev) => {
     const alternatives = Array.from(ev.results[0]).map(r => r.transcript);
-    quizShowResult(alternatives);
+    await quizShowResult(alternatives);
   };
   quizRec.onerror = (ev) => {
     if (ev.error === 'network') { runServerFallback(); return; }

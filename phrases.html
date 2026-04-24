@@ -666,7 +666,47 @@ function normalizeJaDigits(str) {
 function cleanJP(str) {
   return katakanaToHiragana(normalizeJaDigits(String(str).trim()).replace(/[。、！？!?\s]/g, ''));
 }
-function srCompare(expectedHiragana, heard, expectedKanji) {
+
+// Phonetic backstop: resolve hiragana reading of kanji-bearing text via
+// /api/gemini, cached in localStorage. Catches homophone kanji returned
+// by STT (e.g. 始めまして for はじめまして). See listening-quiz.html for
+// the full rationale.
+const READING_CACHE_KEY = 'reading-cache/v1';
+let _readingCache = null;
+function _loadReadingCache() {
+  if (_readingCache) return _readingCache;
+  try { _readingCache = JSON.parse(localStorage.getItem(READING_CACHE_KEY) || '{}'); }
+  catch { _readingCache = {}; }
+  return _readingCache;
+}
+function _saveReadingCache() {
+  try { localStorage.setItem(READING_CACHE_KEY, JSON.stringify(_readingCache || {})); } catch {}
+}
+async function resolveReading(text) {
+  if (!text) return null;
+  const cache = _loadReadingCache();
+  if (cache[text]) return cache[text];
+  try {
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Output ONLY the hiragana reading of the following Japanese text. No kanji, no katakana, no romaji, no punctuation, no explanation.\n\n${text}`,
+        temperature: 0,
+      }),
+    });
+    if (!res.ok) return null;
+    const { text: reading } = await res.json();
+    const hira = String(reading || '').trim().replace(/[。、！？!?\s]/g, '');
+    if (!hira) return null;
+    cache[text] = hira;
+    _saveReadingCache();
+    return hira;
+  } catch { return null; }
+}
+
+async function srCompare(expectedHiragana, heard, expectedKanji) {
   const e = cleanJP(expectedHiragana);
   const h = cleanJP(heard);
   if (h === e || h.includes(e) || e.includes(h)) return 'exact';
@@ -674,6 +714,19 @@ function srCompare(expectedHiragana, heard, expectedKanji) {
     const k = normalizeJaDigits(String(expectedKanji).trim().replace(/[。、！？!?\s]/g, ''));
     const hRaw = normalizeJaDigits(String(heard).trim().replace(/[。、！？!?\s]/g, ''));
     if (hRaw === k || hRaw.includes(k) || k.includes(hRaw)) return 'exact';
+  }
+  // Phonetic backstop for kanji-bearing STT output.
+  if (/[\u4E00-\u9FFF]/.test(heard)) {
+    const reading = await resolveReading(heard);
+    if (reading) {
+      const r = cleanJP(reading);
+      if (r === e || r.includes(e) || e.includes(r)) return 'exact';
+      let overlapR = 0;
+      for (let i = 0; i < Math.min(e.length, r.length); i++) if (e[i] === r[i]) overlapR++;
+      const ratioR = e.length ? overlapR / e.length : 0;
+      if (ratioR >= 0.7) return 'close';
+      if (ratioR >= 0.4) return 'partial';
+    }
   }
   let overlap = 0;
   for (let i = 0; i < Math.min(e.length, h.length); i++) if (e[i] === h[i]) overlap++;
@@ -731,14 +784,14 @@ async function recordAndTranscribe(durationMs = 3500) {
 const speakBtn = document.getElementById('p-speak');
 const speakResult = document.getElementById('p-speak-result');
 
-function gradeSpoken(alts) {
+async function gradeSpoken(alts) {
   if (!currentPhrase) return;
   const rank = ['exact', 'close', 'partial', 'miss'];
   let best = 'miss';
   let bestAlt = alts[0] || '';
   for (const a of alts) {
     if (!a) continue;
-    const lv = srCompare(currentPhrase.reading || currentPhrase.ja, a, currentPhrase.ja);
+    const lv = await srCompare(currentPhrase.reading || currentPhrase.ja, a, currentPhrase.ja);
     if (rank.indexOf(lv) < rank.indexOf(best)) { best = lv; bestAlt = a; }
   }
   const cfg = {
@@ -766,7 +819,7 @@ speakBtn.addEventListener('click', async () => {
   };
 
   if (!phraseRec && isMobile) {
-    try { gradeSpoken([await recordAndTranscribe(3500)]); }
+    try { await gradeSpoken([await recordAndTranscribe(3500)]); }
     catch (e) {
       speakResult.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error — check permissions')}</span>`;
     }
@@ -788,7 +841,7 @@ speakBtn.addEventListener('click', async () => {
     speakResult.innerHTML = '<span style="color:#888;">Google STT blocked — retrying via server…</span>';
     try {
       const transcript = await recordAndTranscribe(3500);
-      gradeSpoken([transcript]);
+      await gradeSpoken([transcript]);
     } catch (e) {
       speakResult.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error — check permissions')}</span>`;
     }
@@ -987,7 +1040,7 @@ function jaDiffHtmlOne(exp, heard) {
 // aligns.
 function hasLatin(s) { return /[A-Za-z]/.test(s || ''); }
 
-function bestGrade(line, heardRaw) {
+async function bestGrade(line, heardRaw) {
   const stripPunct = s => String(s || '').replace(/[。、！？!?\s]/g, '');
 
   // Expected candidates.
@@ -1008,6 +1061,13 @@ function bestGrade(line, heardRaw) {
     stripPunct(heardRaw),
     normalizeJaDigits(stripPunct(heardRaw)),
   ];
+
+  // Layer B: if heard still contains kanji, add its hiragana reading as
+  // an extra candidate. Catches homophone kanji from STT.
+  if (/[\u4E00-\u9FFF]/.test(heardRaw)) {
+    const reading = await resolveReading(heardRaw);
+    if (reading) heards.push(cleanJP(reading));
+  }
 
   let best = { pct: -1, html: escapeHtml(heardRaw || ''), expRaw: '' };
   for (const exp of exps) {
@@ -1032,12 +1092,12 @@ async function dlgSpeak(line, idx) {
 
   const reset = () => { btn.textContent = '🎤 Speak'; btn.disabled = false; };
 
-  const render = (alts) => {
+  const render = async (alts) => {
     // Try each STT alternative against all expected candidates; take best.
     let best = { pct: -1, heard: alts[0] || '', html: '' };
     for (const a of alts) {
       if (!a) continue;
-      const g = bestGrade(line, a);
+      const g = await bestGrade(line, a);
       if (g.pct > best.pct) best = { pct: g.pct, heard: a, html: g.html };
     }
     const pct = Math.max(0, best.pct);
@@ -1051,7 +1111,7 @@ async function dlgSpeak(line, idx) {
   };
 
   if (!phraseRec && isMobile) {
-    try { render([await recordAndTranscribe(4000)]); }
+    try { await render([await recordAndTranscribe(4000)]); }
     catch (e) { result.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`; }
     reset();
     return;
@@ -1066,7 +1126,7 @@ async function dlgSpeak(line, idx) {
     if (usedFallback) return;
     usedFallback = true;
     result.innerHTML = '<span style="color:#888;">Retrying via server…</span>';
-    try { render([await recordAndTranscribe(4000)]); }
+    try { await render([await recordAndTranscribe(4000)]); }
     catch (e) { result.innerHTML = `<span class="sr-miss">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`; }
     reset();
   }

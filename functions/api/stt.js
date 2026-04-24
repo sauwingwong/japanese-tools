@@ -24,7 +24,7 @@ export async function onRequestPost(context) {
     body: JSON.stringify({
       contents: [{
         parts: [
-          { text: 'Transcribe this Japanese audio. Output only the Japanese text exactly as spoken. No explanation, no translation, no punctuation unless it appears naturally in speech.' },
+          { text: 'Transcribe this Japanese audio. Output ONLY hiragana (ひらがな) — convert any kanji or katakana the speaker pronounces into their hiragana reading. Loan words normally written in katakana should also be output as hiragana. No explanation, no translation, no punctuation unless it appears naturally in speech.' },
           { inlineData: { mimeType: mimeType || 'audio/webm', data: audio } }
         ]
       }],
