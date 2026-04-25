@@ -41,6 +41,11 @@ header .plan-link:hover { background: rgba(255,255,255,0.25); }
 main {
   max-width: 720px; margin: 18px auto; padding: 0 14px; flex: 1; width: 100%;
 }
+@media (max-width: 899px) {
+  /* Leave room above the fixed bottom tab bar so nothing — including the
+     Start button — sits under it. */
+  main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
 
 /* Persistent context strip (always visible, lives under header). */
 .context-strip {
@@ -268,7 +273,7 @@ footer {
       <div class="ctx-empty">Loading queue…</div>
     </div>
 
-    <button id="continue-btn" class="continue-btn" disabled>Start</button>
+    <button id="continue-btn" class="continue-btn">Start ▶</button>
   </div>
 
   <button class="all-tools-toggle" id="all-tools-toggle">All tools ▾</button>
@@ -384,12 +389,13 @@ async function refreshPreview() {
   const previewEl = document.getElementById('preview');
   const continueBtn = document.getElementById('continue-btn');
   previewEl.innerHTML = '<div class="ctx-empty">Building queue…</div>';
-  continueBtn.disabled = true;
 
   let p;
   try { p = await buildPreview(currentCup); }
   catch (e) {
     previewEl.innerHTML = `<div style="color:#c62828;">Couldn't build queue: ${escapeHtml(e.message || 'unknown')}</div>`;
+    // Keep the button enabled so the user can retry — startQueue will rebuild.
+    continueBtn.textContent = 'Try again ▶';
     return;
   }
 
@@ -398,8 +404,7 @@ async function refreshPreview() {
       <div class="preview-empty">🎉 All caught up. Come back later, or pick a cup to study new items.</div>
       <div class="preview-meta">No items currently due across the four tools.</div>
     `;
-    continueBtn.disabled = true;
-    continueBtn.textContent = 'Nothing due';
+    continueBtn.textContent = 'Start anyway ▶';
     return;
   }
 
@@ -411,7 +416,6 @@ async function refreshPreview() {
     <div class="preview-row">${tagsHtml}</div>
     <div class="preview-meta">${p.totalQ} questions · ~${p.targetMins} min</div>
   `;
-  continueBtn.disabled = false;
   continueBtn.textContent = 'Continue ▶';
 }
 
