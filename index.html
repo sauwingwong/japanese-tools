@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Japanese Learning Tools</title>
+<title>Japanese — Today</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#c62828">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -22,7 +22,7 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
 }
-a { -webkit-tap-highlight-color: transparent; }
+a, button { -webkit-tap-highlight-color: transparent; }
 header {
   background: #c62828; color: white;
   padding: 14px 20px; padding-top: calc(14px + env(safe-area-inset-top));
@@ -35,49 +35,134 @@ header .plan-link {
   color: #fff; text-decoration: none;
   background: rgba(255,255,255,0.15); padding: 6px 12px; border-radius: 16px;
   font-size: 0.78rem; font-weight: 500; white-space: nowrap;
-  backdrop-filter: blur(6px);
 }
 header .plan-link:hover { background: rgba(255,255,255,0.25); }
 
 main {
-  max-width: 960px; margin: 20px auto; padding: 0 14px;
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; flex: 1;
-  align-content: start;
-}
-@media (max-width: 720px) {
-  main { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 0 10px; margin: 12px auto; }
+  max-width: 720px; margin: 18px auto; padding: 0 14px; flex: 1; width: 100%;
 }
 
+/* Persistent context strip (always visible, lives under header). */
+.context-strip {
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  background: #fff; border-radius: 12px; padding: 10px 14px;
+  font-size: 0.82rem; color: #555;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+  margin-bottom: 14px;
+}
+.context-strip .ctx-item { display: inline-flex; align-items: center; gap: 5px; }
+.context-strip .ctx-strong { color: #1a237e; font-weight: 600; }
+.context-strip .ctx-retention { color: #2e7d32; font-weight: 600; }
+.context-strip .ctx-partner { color: #6a1b9a; }
+.context-strip .ctx-last { color: #999; }
+.context-strip .ctx-empty { color: #999; font-style: italic; }
+
+/* Hero "Today" card. */
+.hero {
+  background: #fff; border-radius: 16px; padding: 22px 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  margin-bottom: 14px;
+  border-top: 5px solid #c62828;
+}
+.hero-eyebrow { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.hero h2 { font-size: 1.35rem; color: #1a237e; margin-bottom: 12px; line-height: 1.2; }
+
+.cups { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.cup-btn {
+  flex: 1; min-width: 92px;
+  background: #fff; border: 2px solid #e0e0e0; border-radius: 12px;
+  padding: 12px 8px; font-size: 0.92rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; color: #555;
+  font-family: inherit;
+  display: flex; flex-direction: column; gap: 2px; align-items: center;
+}
+.cup-btn:hover:not(.active) { border-color: #c62828; color: #c62828; }
+.cup-btn.active {
+  background: #c62828; color: #fff; border-color: #c62828;
+  box-shadow: 0 2px 8px rgba(198,40,40,0.3);
+}
+.cup-btn .cup-emoji { font-size: 1.4rem; line-height: 1; }
+.cup-btn .cup-label { font-size: 0.85rem; font-weight: 700; }
+.cup-btn .cup-sub { font-size: 0.7rem; opacity: 0.8; font-weight: 400; }
+
+.preview {
+  background: #f7f7fb; border-radius: 10px; padding: 12px 14px;
+  font-size: 0.88rem; color: #444; line-height: 1.55;
+  margin-bottom: 14px;
+  min-height: 52px;
+}
+.preview-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.preview-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #fff; border: 1px solid #e0e0e0; border-radius: 14px;
+  padding: 3px 10px; font-size: 0.82rem;
+}
+.preview-tag.empty { opacity: 0.55; }
+.preview-tag .pt-icon { font-size: 0.95rem; }
+.preview-tag .pt-num { font-weight: 700; color: #1a237e; }
+.preview-meta { color: #888; font-size: 0.78rem; margin-top: 6px; }
+.preview-empty { color: #2e7d32; font-style: italic; }
+
+.continue-btn {
+  width: 100%; background: #1a237e; color: #fff; border: none; border-radius: 10px;
+  padding: 14px 18px; font-size: 1.05rem; font-weight: 700; cursor: pointer;
+  transition: background 0.12s, transform 0.08s;
+  font-family: inherit;
+}
+.continue-btn:hover:not(:disabled) { background: #0d1551; }
+.continue-btn:active { transform: scale(0.98); }
+.continue-btn:disabled { background: #aaa; cursor: not-allowed; }
+
+/* "All tools" expander (kept for muscle memory). */
+.all-tools-toggle {
+  background: none; border: none; color: #777; font-size: 0.85rem;
+  cursor: pointer; padding: 8px 12px; margin: 0 auto; display: block;
+  font-family: inherit;
+}
+.all-tools-toggle:hover { color: #1a237e; }
+.all-tools-grid {
+  display: none; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-top: 8px;
+}
+.all-tools-grid.open { display: grid; }
+@media (max-width: 540px) { .all-tools-grid { grid-template-columns: repeat(2, 1fr); } }
 .tool-card {
-  background: white; border-radius: 12px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-  padding: 18px 14px 16px;
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  gap: 6px;
+  background: white; border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  padding: 12px 10px;
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px;
   text-decoration: none; color: inherit;
-  border-left: 4px solid #c62828;
-  transition: box-shadow 0.15s, transform 0.1s;
-  min-height: 118px;
+  border-left: 3px solid #c62828;
 }
-.tool-card:hover { box-shadow: 0 3px 14px rgba(0,0,0,0.12); transform: translateY(-2px); }
-.tool-card:active { transform: scale(0.97); transition: transform 90ms; }
-
 .tool-card.blue   { border-left-color: #1a237e; }
 .tool-card.green  { border-left-color: #2e7d32; }
 .tool-card.purple { border-left-color: #6a1b9a; }
 .tool-card.teal   { border-left-color: #00695c; }
-.tool-card.sky    { border-left-color: #0277bd; }
+.tool-card.orange { border-left-color: #e65100; }
+.tool-card .tool-icon { font-size: 1.4rem; }
+.tool-card .tool-title { font-size: 0.78rem; font-weight: 700; color: #555; }
 
-.tool-icon { font-size: 2rem; line-height: 1; margin-bottom: 2px; }
-.tool-title {
-  font-size: 0.92rem; font-weight: 700; color: #c62828; line-height: 1.25;
+/* Done screen (after queue completes). */
+.done-card {
+  display: none;
+  background: #fff; border-radius: 16px; padding: 24px 20px; text-align: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 14px;
 }
-.tool-card.blue   .tool-title { color: #1a237e; }
-.tool-card.green  .tool-title { color: #2e7d32; }
-.tool-card.purple .tool-title { color: #6a1b9a; }
-.tool-card.teal   .tool-title { color: #00695c; }
-.tool-card.sky    .tool-title { color: #0277bd; }
-.tool-tagline { font-size: 0.72rem; color: #777; line-height: 1.35; }
+.done-card.visible { display: block; }
+.done-medal { font-size: 60px; line-height: 1; }
+.done-card h2 { color: #1a237e; margin: 6px 0 8px; }
+.done-summary { color: #444; margin: 8px 0 14px; font-size: 0.95rem; }
+.done-perslice { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+.done-perslice .ds {
+  background: #f7f7fb; border-radius: 10px; padding: 6px 12px;
+  font-size: 0.82rem; color: #555;
+}
+.done-perslice .ds strong { color: #1a237e; }
+.done-again {
+  background: #1a237e; color: #fff; border: none;
+  padding: 10px 22px; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
 
 footer {
   text-align: center; padding: 14px 20px;
@@ -85,7 +170,7 @@ footer {
   font-size: 0.7rem; color: #aaa;
 }
 
-/* Shared bottom tab bar — matches the other pages. */
+/* Bottom mobile tabs. */
 .nav-tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
   background: rgba(255,255,255,0.92); backdrop-filter: blur(18px);
@@ -93,17 +178,12 @@ footer {
   border-top: 1px solid rgba(0,0,0,0.08);
   display: grid; grid-template-columns: repeat(7, 1fr);
   padding: 7px 0; padding-bottom: calc(7px + env(safe-area-inset-bottom));
-  /* Inset the outermost tabs away from the iPhone rounded corners. In
-     portrait safe-area-inset-left/right are 0, so the physical screen
-     curve clips the first and last tabs. Use max() to always reserve at
-     least 14 px, and go wider in landscape where the notch safe area is
-     larger. */
   padding-left: max(30px, env(safe-area-inset-left));
   padding-right: max(30px, env(safe-area-inset-right));
 }
-@media(min-width:600px){ .nav-tabs { display: none; } }
+@media(min-width:900px){ .nav-tabs { display: none; } }
 
-/* Desktop horizontal tab bar (≥900px). See CLAUDE.md §nav. */
+/* Desktop horizontal tab bar (≥900px). */
 .nav-desktop { display: none; }
 @media (min-width: 900px) {
   .nav-desktop {
@@ -118,7 +198,6 @@ footer {
   .nav-desktop a.active { background: #c62828; color: #fff; }
   .nav-desktop a:hover { background: #f3f4f6; }
   .nav-desktop a.active:hover { background: #b71c1c; }
-  .nav-tabs, .tabbar-mobile { display: none !important; }
 }
 .tabi {
   font-size: 0.66rem; text-decoration: none; color: #888; text-align: center;
@@ -132,8 +211,8 @@ footer {
 
 <header>
   <div class="title-wrap">
-    <h1>🎌 Japanese Learning Tools</h1>
-    <p>N5 / N4 — pronunciation, grammar, kanji, listening</p>
+    <h1>🎌 Japanese — Today</h1>
+    <p>N5 / N4 — bounded daily session</p>
   </div>
   <a class="plan-link" href="study-plan.html">📅 Plan</a>
 </header>
@@ -149,41 +228,71 @@ footer {
 </nav>
 
 <main>
-  <a class="tool-card" href="phoneme-trainer.html">
-    <div class="tool-icon">🗣️</div>
-    <div class="tool-title">Phoneme Trainer</div>
-    <div class="tool-tagline">Sound chart · pitch · shadowing</div>
-  </a>
 
-  <a class="tool-card green" href="grammar.html">
-    <div class="tool-icon">🧠</div>
-    <div class="tool-title">Grammar Coach</div>
-    <div class="tool-tagline">N5/N4 patterns · AI coach</div>
-  </a>
+  <div id="context-strip" class="context-strip">
+    <span class="ctx-empty">Loading…</span>
+  </div>
 
-  <a class="tool-card purple" href="kanji.html">
-    <div class="tool-icon">🈁</div>
-    <div class="tool-title">Kanji Reading</div>
-    <div class="tool-tagline">On/kun · in-context</div>
-  </a>
+  <!-- Aggregate "Day complete" card, shown when ?done=1 in URL. -->
+  <div id="done-card" class="done-card">
+    <div class="done-medal" id="done-medal">🥇</div>
+    <h2>Day complete</h2>
+    <div class="done-summary" id="done-summary">—</div>
+    <div class="done-perslice" id="done-perslice"></div>
+    <button class="done-again" id="done-again">Start another</button>
+  </div>
 
-  <a class="tool-card teal" href="dictation.html">
-    <div class="tool-icon">✍️</div>
-    <div class="tool-title">Dictation</div>
-    <div class="tool-tagline">Type what you hear · AI grading</div>
-  </a>
+  <div id="hero" class="hero">
+    <div class="hero-eyebrow">Today</div>
+    <h2 id="hero-title">Pick a session</h2>
 
-  <a class="tool-card blue" href="listening-quiz.html">
-    <div class="tool-icon">🎧</div>
-    <div class="tool-title">Listening Quiz</div>
-    <div class="tool-tagline">N5 + N4 vocab · say it aloud</div>
-  </a>
+    <div class="cups" id="cups">
+      <button class="cup-btn" data-cup="5">
+        <span class="cup-emoji">☕</span>
+        <span class="cup-label">5 min</span>
+        <span class="cup-sub">Quick</span>
+      </button>
+      <button class="cup-btn active" data-cup="15">
+        <span class="cup-emoji">🎯</span>
+        <span class="cup-label">15 min</span>
+        <span class="cup-sub">Focus</span>
+      </button>
+      <button class="cup-btn" data-cup="30">
+        <span class="cup-emoji">🔥</span>
+        <span class="cup-label">30 min</span>
+        <span class="cup-sub">Deep</span>
+      </button>
+    </div>
 
-  <a class="tool-card sky" href="phrases.html" style="border-left-color:#e65100;">
-    <div class="tool-icon">🗺️</div>
-    <div class="tool-title" style="color:#e65100;">Tourist Phrases</div>
-    <div class="tool-tagline">Travel essentials · 200 phrases</div>
-  </a>
+    <div id="preview" class="preview">
+      <div class="ctx-empty">Loading queue…</div>
+    </div>
+
+    <button id="continue-btn" class="continue-btn" disabled>Start</button>
+  </div>
+
+  <button class="all-tools-toggle" id="all-tools-toggle">All tools ▾</button>
+  <div id="all-tools-grid" class="all-tools-grid">
+    <a class="tool-card" href="phoneme-trainer.html">
+      <div class="tool-icon">🗣️</div><div class="tool-title">Phoneme</div>
+    </a>
+    <a class="tool-card green" href="grammar.html">
+      <div class="tool-icon">🧠</div><div class="tool-title">Grammar</div>
+    </a>
+    <a class="tool-card purple" href="kanji.html">
+      <div class="tool-icon">🈁</div><div class="tool-title">Kanji</div>
+    </a>
+    <a class="tool-card teal" href="dictation.html">
+      <div class="tool-icon">✍️</div><div class="tool-title">Dictation</div>
+    </a>
+    <a class="tool-card blue" href="listening-quiz.html">
+      <div class="tool-icon">🎧</div><div class="tool-title">Vocab</div>
+    </a>
+    <a class="tool-card orange" href="phrases.html">
+      <div class="tool-icon">🗺️</div><div class="tool-title">Phrases</div>
+    </a>
+  </div>
+
 </main>
 
 <footer>Powered by Gemini · Built for personal Japanese study</footer>
@@ -197,6 +306,172 @@ footer {
   <a class="tabi" href="/dictation.html"><span class="tabi-ico">✍️</span>Dictation</a>
   <a class="tabi" href="/phrases.html"><span class="tabi-ico">🗺️</span>Phrases</a>
 </nav>
+
+<script type="module">
+import { createSRS, presence } from '/js/srs.js';
+import { TOOLS, CUPS, buildPreview, startQueue, lastCup, aggregateSummary, clearQueue } from '/js/today.js';
+
+// ── Persistent context strip ──────────────────────────────────────────────
+// Aggregates retention + last-studied across all 4 tool namespaces, then
+// async-fetches the partner row from /api/srs?ns=presence&all=1.
+async function renderContextStrip() {
+  const strip = document.getElementById('context-strip');
+  const parts = [];
+
+  // Pull retention7d + lastStudied from each tool's SRS instance.
+  let totalRet = 0, retCount = 0;
+  let bestLast = { at: 0, item: null, slice: null };
+  for (const t of TOOLS) {
+    const s = createSRS(t.ns, { sync: false });
+    const r = s.retention7d();
+    if (typeof r === 'number') { totalRet += r; retCount++; }
+    const last = s.lastStudied();
+    if (last && last.at > bestLast.at) {
+      bestLast = { at: last.at, item: last.id, slice: t.label };
+    }
+  }
+  if (retCount) {
+    const avg = Math.round((totalRet / retCount) * 100);
+    parts.push(`<span class="ctx-item ctx-retention" title="7-day retention rate">${avg}% retention</span>`);
+  }
+  if (bestLast.at) {
+    parts.push(`<span class="ctx-item ctx-last">last: ${escapeHtml(bestLast.item || '')} · ${bestLast.slice}</span>`);
+  }
+  if (!parts.length) {
+    parts.push('<span class="ctx-empty">No reviews yet — pick a cup below to begin.</span>');
+  }
+  strip.innerHTML = parts.join('');
+
+  // Async: partner presence (may take 100-500ms).
+  try {
+    const p = await presence.fetchPartner();
+    if (p && p.lastStudied) {
+      const ago = humanAgo(new Date(p.lastStudied).getTime());
+      const itemTxt = p.lastItem ? ` · ${escapeHtml(p.lastItem)}` : '';
+      strip.insertAdjacentHTML('beforeend',
+        `<span class="ctx-item ctx-partner">👥 partner ${ago}${itemTxt}</span>`);
+    }
+  } catch {}
+}
+
+function humanAgo(ts) {
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 2) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
+// ── Cup selection + preview ───────────────────────────────────────────────
+let currentCup = lastCup();
+
+function setActiveCup(cup) {
+  currentCup = cup;
+  document.querySelectorAll('.cup-btn').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.cup) === cup);
+  });
+}
+
+async function refreshPreview() {
+  const previewEl = document.getElementById('preview');
+  const continueBtn = document.getElementById('continue-btn');
+  previewEl.innerHTML = '<div class="ctx-empty">Building queue…</div>';
+  continueBtn.disabled = true;
+
+  let p;
+  try { p = await buildPreview(currentCup); }
+  catch (e) {
+    previewEl.innerHTML = `<div style="color:#c62828;">Couldn't build queue: ${escapeHtml(e.message || 'unknown')}</div>`;
+    return;
+  }
+
+  if (!p.totalQ) {
+    previewEl.innerHTML = `
+      <div class="preview-empty">🎉 All caught up. Come back later, or pick a cup to study new items.</div>
+      <div class="preview-meta">No items currently due across the four tools.</div>
+    `;
+    continueBtn.disabled = true;
+    continueBtn.textContent = 'Nothing due';
+    return;
+  }
+
+  const tagsHtml = p.slices.map(s => {
+    const tool = TOOLS.find(t => t.id === s.tool);
+    return `<span class="preview-tag"><span class="pt-icon">${tool.icon}</span><span class="pt-num">${s.count}</span> ${escapeHtml(tool.label.toLowerCase())}</span>`;
+  }).join('');
+  previewEl.innerHTML = `
+    <div class="preview-row">${tagsHtml}</div>
+    <div class="preview-meta">${p.totalQ} questions · ~${p.targetMins} min</div>
+  `;
+  continueBtn.disabled = false;
+  continueBtn.textContent = 'Continue ▶';
+}
+
+document.querySelectorAll('.cup-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setActiveCup(Number(btn.dataset.cup));
+    refreshPreview();
+  });
+});
+
+document.getElementById('continue-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('continue-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  const url = await startQueue(currentCup);
+  location.href = url;
+});
+
+// ── All-tools expander ───────────────────────────────────────────────────
+document.getElementById('all-tools-toggle').addEventListener('click', () => {
+  const grid = document.getElementById('all-tools-grid');
+  const toggle = document.getElementById('all-tools-toggle');
+  const open = grid.classList.toggle('open');
+  toggle.textContent = open ? 'All tools ▴' : 'All tools ▾';
+});
+
+// ── Done screen (after queue completes) ───────────────────────────────────
+function maybeRenderDone() {
+  if (new URLSearchParams(location.search).get('done') !== '1') return;
+  const summary = aggregateSummary();
+  if (!summary || !summary.total) return;
+  const card = document.getElementById('done-card');
+  const hero = document.getElementById('hero');
+  card.classList.add('visible');
+  hero.style.display = 'none';
+
+  const pct = Math.round(summary.pct * 100);
+  document.getElementById('done-medal').textContent =
+    pct >= 90 ? '🥇' : pct >= 70 ? '🥈' : pct >= 50 ? '🥉' : '💪';
+  const mins = (summary.durationMs / 60000).toFixed(1);
+  document.getElementById('done-summary').innerHTML =
+    `Score: <strong>${summary.correct} / ${summary.total}</strong> (${pct}%) · ${mins} min`;
+  const perEl = document.getElementById('done-perslice');
+  perEl.innerHTML = summary.perSlice.map(s => {
+    const tool = TOOLS.find(t => t.id === s.tool);
+    const sm = s.summary;
+    if (!sm) return `<div class="ds">${tool.icon} ${tool.label}: skipped</div>`;
+    return `<div class="ds">${tool.icon} ${tool.label}: <strong>${sm.correct}/${sm.total}</strong></div>`;
+  }).join('');
+  document.getElementById('done-again').addEventListener('click', () => {
+    clearQueue();
+    location.href = '/index.html';
+  });
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+setActiveCup(currentCup);
+renderContextStrip();
+refreshPreview();
+maybeRenderDone();
+</script>
 
 <script src="/js/sw-register.js" defer></script>
 </body>

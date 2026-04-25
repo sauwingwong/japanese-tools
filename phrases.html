@@ -312,6 +312,8 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
 import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
 import { createSession } from '/js/session.js';
+import { queueState } from '/js/today.js';
+const _queue = queueState();
 
 // ── Data ──
 const data = await fetch('/data/phrases-tourist.json').then(r => r.json());
@@ -331,7 +333,9 @@ const CATEGORIES = [
 ];
 
 let activeCat = localStorage.getItem('phrases-tourist-category') || 'all';
-let mode = localStorage.getItem('phrases-tourist-mode') || 'browse';
+// Honor ?mode=… from queue routing so the queue's phrases slice always lands in practice.
+const _urlMode = new URLSearchParams(location.search).get('mode');
+let mode = _urlMode || localStorage.getItem('phrases-tourist-mode') || 'browse';
 const srs = createSRS('phrases-tourist', { sync: true });
 function renderPSrsBadge(ids) {
   const el = document.getElementById('p-srs-badge');
@@ -497,7 +501,7 @@ function renderBrowse() {
 // ── Practice mode ──
 let currentPhrase = null;
 let revealed = false;
-const SESSION_LENGTH = 15;
+const SESSION_LENGTH = _queue ? _queue.count : 15;
 
 const session = createSession({
   length: SESSION_LENGTH,
@@ -510,6 +514,7 @@ const session = createSession({
     if (currentPhrase) {
       presence.markStudied({ lastItem: currentPhrase.ja || currentPhrase.id, lastSlice: 'phrases' });
     }
+    if (_queue) _queue.advance(s);
   },
   onReset: () => {
     document.getElementById('practice-card').style.display = '';

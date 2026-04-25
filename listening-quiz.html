@@ -401,7 +401,9 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
 import { createSession } from '/js/session.js';
+import { queueState } from '/js/today.js';
 const askGemini = window.askGemini;
+const _queue = queueState();
 
 // ═══════════════════════════════════════════════════════════════════════
 // VOCABULARY DATA — loaded from /data/vocab-n5n4.json
@@ -610,7 +612,7 @@ let currentWord = null;
 let currentSentence = null; // {ja, en} from Gemini, populated on reveal
 let activeCat = localStorage.getItem('quiz/cat') || 'all';
 let activeLevel = localStorage.getItem('quiz/level') || 'all';
-const SESSION_LENGTH = 20;
+const SESSION_LENGTH = _queue ? _queue.count : 20;
 
 // Bounded session shell: HUD, streak, progress, end-screen with medal +
 // review list + finish-line ding/confetti. See js/session.js.
@@ -626,6 +628,7 @@ const session = createSession({
     if (currentWord && currentWord.word) {
       presence.markStudied({ lastItem: currentWord.word.h, lastSlice: 'vocab' });
     }
+    if (_queue) _queue.advance(s);
   },
   onReset: () => initPool(),
 });

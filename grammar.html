@@ -236,7 +236,9 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
 import { createSession } from '/js/session.js';
+import { queueState } from '/js/today.js';
 const askGemini = window.askGemini;
+const _queue = queueState();
 
 // ── Load seed ──
 const data = await fetch('/data/grammar-n5n4.json').then(r => r.json());
@@ -250,7 +252,7 @@ let mode = localStorage.getItem('grammar-mode') || 'form-to-meaning';
 if (mode === 'cloze') mode = 'compose';
 let current = null;
 let answered = false;
-const SESSION_LENGTH = 12;
+const SESSION_LENGTH = _queue ? _queue.count : 12;
 
 const session = createSession({
   length: SESSION_LENGTH,
@@ -263,6 +265,7 @@ const session = createSession({
     if (current && current.id) {
       presence.markStudied({ lastItem: current.pattern || current.id, lastSlice: 'grammar' });
     }
+    if (_queue) _queue.advance(s);
   },
   onReset: () => {
     document.querySelector('main .card').style.display = '';
