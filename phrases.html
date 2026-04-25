@@ -268,8 +268,8 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
   <div id="browse-view"></div>
 
   <div id="practice-view" style="display:none;">
+    <div id="session-hud"></div>
     <div class="pstats">
-      <span>Round <strong id="p-round">1</strong></span>
       <span id="p-srs-badge"></span>
       <span><span id="p-pool-size">0</span> in deck</span>
     </div>
@@ -292,6 +292,7 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
         <button class="grade-hard" id="p-hard">↻ Need more</button>
       </div>
     </div>
+    <div id="session-end"></div>
   </div>
 
   <div id="dialogues-view" style="display:none;"></div>
@@ -308,8 +309,9 @@ header h1 { font-size: 1.2rem; font-weight: 700; }
 </nav>
 
 <script type="module">
-import { createSRS } from '/js/srs.js';
+import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
+import { createSession } from '/js/session.js';
 
 // ── Data ──
 const data = await fetch('/data/phrases-tourist.json').then(r => r.json());
@@ -495,8 +497,27 @@ function renderBrowse() {
 // ── Practice mode ──
 let currentPhrase = null;
 let revealed = false;
-let roundN = parseInt(localStorage.getItem('phrases-tourist-round') || '1', 10);
-document.getElementById('p-round').textContent = roundN;
+const SESSION_LENGTH = 15;
+
+const session = createSession({
+  length: SESSION_LENGTH,
+  hudEl: document.getElementById('session-hud'),
+  endEl: document.getElementById('session-end'),
+  poolSize: () => filteredPool().length,
+  retention7d: () => srs.retention7d(),
+  onComplete: (s) => {
+    document.getElementById('practice-card').style.display = 'none';
+    if (currentPhrase) {
+      presence.markStudied({ lastItem: currentPhrase.ja || currentPhrase.id, lastSlice: 'phrases' });
+    }
+  },
+  onReset: () => {
+    document.getElementById('practice-card').style.display = '';
+    session.start();
+    currentPhrase = null;
+    renderPractice();
+  },
+});
 
 function renderPractice() {
   const pool = filteredPool();
@@ -540,19 +561,25 @@ document.getElementById('p-reveal').onclick = reveal;
 document.getElementById('p-good').onclick = () => {
   if (!currentPhrase) return;
   srs.recordResult(currentPhrase.id, true);
-  advanceRound();
+  session.recordAnswer({
+    id: currentPhrase.id,
+    correct: true,
+    label: currentPhrase.ja || currentPhrase.id,
+    meaning: currentPhrase.en || '',
+  });
+  if (session.advance()) renderPractice();
 };
 document.getElementById('p-hard').onclick = () => {
   if (!currentPhrase) return;
   srs.recordResult(currentPhrase.id, false);
-  advanceRound();
+  session.recordAnswer({
+    id: currentPhrase.id,
+    correct: false,
+    label: currentPhrase.ja || currentPhrase.id,
+    meaning: currentPhrase.en || '',
+  });
+  if (session.advance()) renderPractice();
 };
-function advanceRound() {
-  roundN++;
-  localStorage.setItem('phrases-tourist-round', String(roundN));
-  document.getElementById('p-round').textContent = roundN;
-  renderPractice();
-}
 
 // ── Mode switching ──
 function renderCurrentMode() {
@@ -570,8 +597,13 @@ function renderCurrentMode() {
   } else if (mode === 'practice') {
     filterBar.style.display = '';
     practiceEl.style.display = '';
-    if (!currentPhrase) renderPractice();
-    else document.getElementById('p-pool-size').textContent = filteredPool().length;
+    document.getElementById('practice-card').style.display = '';
+    if (!currentPhrase) {
+      session.start();
+      renderPractice();
+    } else {
+      document.getElementById('p-pool-size').textContent = filteredPool().length;
+    }
   } else if (mode === 'dialogues') {
     filterBar.style.display = 'none';
     dlgEl.style.display = '';

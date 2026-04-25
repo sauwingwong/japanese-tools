@@ -157,14 +157,15 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
     <div class="mode-bar" id="mode-bar">
       <button data-mode="form-to-meaning" class="active">Form → Meaning</button>
       <button data-mode="meaning-to-form">Meaning → Form</button>
-      <button data-mode="cloze">Cloze</button>
+      <button data-mode="compose">✏️ Compose</button>
     </div>
   </div>
+
+  <div id="session-hud"></div>
 
   <div class="card">
     <div class="score-bar">
       <span>Known <strong id="stat-known">0</strong> · Learning <strong id="stat-learning">0</strong> · Struggling <strong id="stat-struggling">0</strong> · Due <strong id="stat-due">0</strong> · New <strong id="stat-new">0</strong></span>
-      <span>Score <strong id="score">0 / 0</strong></span>
     </div>
 
     <div id="question-area">
@@ -172,6 +173,20 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
       <div class="pattern-form" id="pattern-form"></div>
       <div class="prompt-text" id="prompt-text"></div>
       <div id="options-grid"></div>
+      <div id="compose-area" style="display:none; margin-top:12px;">
+        <textarea id="compose-input" placeholder="日本語で書いてください…"
+          style="width:100%; min-height:80px; padding:10px 12px; font-size:1.05rem;
+                 border:1.5px solid #c8e6c9; border-radius:8px; font-family:inherit;
+                 line-height:1.5; resize:vertical;"></textarea>
+        <div style="text-align:right; margin-top:8px;">
+          <button id="compose-submit"
+            style="background:#2e7d32; color:#fff; border:none; border-radius:8px;
+                   padding:9px 22px; font-size:0.92rem; font-weight:600; cursor:pointer;">
+            Submit ✓
+          </button>
+        </div>
+        <div id="compose-result" style="margin-top:10px;"></div>
+      </div>
       <div id="feedback"></div>
       <div id="coach-box"></div>
       <div class="example" id="example">
@@ -188,6 +203,8 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
       <button id="next-btn" style="display:none">Next →</button>
     </div>
   </div>
+
+  <div id="session-end"></div>
 </main>
 
 <nav class="tabbar-mobile">
@@ -216,8 +233,9 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 })(window);
 </script>
 <script type="module">
-import { createSRS } from '/js/srs.js';
+import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
+import { createSession } from '/js/session.js';
 const askGemini = window.askGemini;
 
 // ── Load seed ──
@@ -228,9 +246,30 @@ const srs = createSRS('n5n4-grammar', { sync: true });
 
 let level = localStorage.getItem('grammar-level') || 'all';
 let mode = localStorage.getItem('grammar-mode') || 'form-to-meaning';
+// Migrate from now-removed cloze mode.
+if (mode === 'cloze') mode = 'compose';
 let current = null;
 let answered = false;
-let correct = 0, total = 0;
+const SESSION_LENGTH = 12;
+
+const session = createSession({
+  length: SESSION_LENGTH,
+  hudEl: document.getElementById('session-hud'),
+  endEl: document.getElementById('session-end'),
+  poolSize: () => poolForLevel().length,
+  retention7d: () => srs.retention7d(),
+  onComplete: (s) => {
+    document.querySelector('main .card').style.display = 'none';
+    if (current && current.id) {
+      presence.markStudied({ lastItem: current.pattern || current.id, lastSlice: 'grammar' });
+    }
+  },
+  onReset: () => {
+    document.querySelector('main .card').style.display = '';
+    session.start();
+    next();
+  },
+});
 
 function poolForLevel() {
   return level === 'all' ? ALL_PATTERNS : ALL_PATTERNS.filter(p => p.level === level);
@@ -243,6 +282,8 @@ function applyLevel() {
   });
   localStorage.setItem('grammar-level', level);
   updateStats();
+  document.querySelector('main .card').style.display = '';
+  session.start();
   next();
 }
 function applyMode() {
@@ -250,6 +291,8 @@ function applyMode() {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
   localStorage.setItem('grammar-mode', mode);
+  document.querySelector('main .card').style.display = '';
+  session.start();
   next();
 }
 document.querySelectorAll('#filter-bar button').forEach(b => {
@@ -275,7 +318,11 @@ function updateStats() {
 // ── Reset ──
 document.getElementById('reset-btn').addEventListener('click', (e) => {
   e.preventDefault();
-  if (confirm('Reset grammar SRS progress?')) { srs.reset(); updateStats(); next(); }
+  if (confirm('Reset grammar SRS progress?')) {
+    srs.reset(); updateStats();
+    document.querySelector('main .card').style.display = '';
+    session.start(); next();
+  }
 });
 
 // ── Example sentences via Gemini (cached) ──
@@ -394,6 +441,48 @@ function pickDistractors(correctPattern, n, byField) {
   return shuffled.slice(0, n).map(p => p[byField]);
 }
 
+// ── Composition prompt + grader ──
+const composePromptSchema = {
+  type: 'object',
+  properties: { en: { type: 'string' } },
+  required: ['en'],
+};
+async function getComposePrompt(pattern) {
+  // Per-pattern English prompt sentence. Cached so repeats reuse the same prompt.
+  const text = await askGemini(
+    `Suggest ONE short English sentence (8-15 words, everyday topic, JLPT ${pattern.level} appropriate vocabulary) that a learner could naturally translate into Japanese using the grammar pattern "${pattern.pattern}" (${pattern.meaning_en}). Output ONLY a JSON object {en: "…"}. The sentence should *require* the target pattern, not be naturally expressible without it.`,
+    { schema: composePromptSchema, cacheKey: 'grammar-compose/' + pattern.id, ttlDays: 30, temperature: 0.5 }
+  );
+  let data = text;
+  if (typeof text === 'string') { try { data = JSON.parse(text); } catch { data = { en: text }; } }
+  return (data && data.en) || pattern.meaning_en;
+}
+
+const gradeSchema = {
+  type: 'object',
+  properties: {
+    score: { type: 'integer' },
+    correctVersion: { type: 'string' },
+    feedback: { type: 'string' },
+  },
+  required: ['score', 'correctVersion', 'feedback'],
+};
+async function gradeComposition(pattern, english, learnerJa) {
+  const prompt =
+    `Grade this learner's Japanese sentence against the target.\n` +
+    `Target English: "${english}"\n` +
+    `Target grammar pattern: ${pattern.pattern} (${pattern.meaning_en})\n` +
+    `Learner Japanese: "${learnerJa}"\n` +
+    `Return JSON {score: 0|1|2, correctVersion: "natural Japanese reference using the target pattern", feedback: "≤2 short English sentences explaining the score"}. ` +
+    `Score 2 = correct (uses pattern, natural, minor typos OK). ` +
+    `Score 1 = partial (almost right, e.g. wrong particle or missing kana). ` +
+    `Score 0 = wrong or pattern not used.`;
+  const text = await askGemini(prompt, { schema: gradeSchema, temperature: 0.2 });
+  let data = text;
+  if (typeof text === 'string') { try { data = JSON.parse(text); } catch { throw new Error('Bad grader JSON'); } }
+  return data;
+}
+
 async function next() {
   answered = false;
   document.getElementById('feedback').textContent = '';
@@ -402,6 +491,12 @@ async function next() {
   document.getElementById('coach-box').innerHTML = '';
   document.getElementById('example').classList.remove('visible');
   document.getElementById('next-btn').style.display = 'none';
+  document.getElementById('compose-area').style.display = 'none';
+  document.getElementById('compose-result').innerHTML = '';
+  const ci = document.getElementById('compose-input');
+  ci.value = '';
+  ci.disabled = false;
+  document.getElementById('compose-submit').disabled = false;
 
   const pool = poolForLevel();
   if (!pool.length) return;
@@ -417,6 +512,7 @@ async function next() {
   const levelBadge = `<span class="level-tag">${current.level}</span>`;
 
   if (mode === 'form-to-meaning') {
+    grid.style.display = '';
     patternDisplay.innerHTML = current.pattern + levelBadge;
     patternForm.textContent = current.form;
     promptText.textContent = 'What does this pattern mean?';
@@ -426,6 +522,7 @@ async function next() {
     ].sort(() => Math.random() - 0.5);
     renderOpts(opts);
   } else if (mode === 'meaning-to-form') {
+    grid.style.display = '';
     patternDisplay.innerHTML = '“' + current.meaning_en + '”' + levelBadge;
     patternForm.textContent = '';
     promptText.textContent = 'Which pattern matches?';
@@ -434,25 +531,21 @@ async function next() {
       ...pickDistractors(current, 3, 'pattern').map(p => ({ label: p, correct: false }))
     ].sort(() => Math.random() - 0.5);
     renderOpts(opts);
-  } else {
-    // Cloze: generate sentence with pattern, remove pattern core, ask to fill in
-    patternDisplay.innerHTML = 'Cloze' + levelBadge;
-    patternForm.textContent = current.meaning_en;
-    promptText.textContent = 'Loading sentence…';
-    const ex = await getExamples(current);
-    const s = ex.sentences && ex.sentences[0];
-    if (s) {
-      // Simplistic cloze: show sentence with pattern core replaced by ___ and options are pattern vs distractors
-      const blanked = s.ja.replace(current.pattern.replace(/〜/g, ''), '___');
-      promptText.innerHTML = blanked + '<div style="font-size:0.8rem;color:#888;margin-top:6px;">' + s.en + '</div>';
-    } else {
-      promptText.textContent = 'Pick the pattern for: ' + current.meaning_en;
+  } else if (mode === 'compose') {
+    grid.style.display = 'none';
+    patternDisplay.innerHTML = current.pattern + levelBadge;
+    patternForm.textContent = current.meaning_en + ' · ' + current.form;
+    promptText.textContent = 'Loading prompt…';
+    document.getElementById('compose-area').style.display = 'block';
+    try {
+      const en = await getComposePrompt(current);
+      promptText.innerHTML = `Translate into Japanese using <strong>${escapeHtml(current.pattern)}</strong>:<br>` +
+        `<span style="display:inline-block; margin-top:6px; font-size:1rem; color:#1a237e;">“${escapeHtml(en)}”</span>`;
+      document.getElementById('compose-input').dataset.english = en;
+      document.getElementById('compose-input').focus();
+    } catch (e) {
+      promptText.textContent = 'Couldn\'t fetch prompt — try Next.';
     }
-    const opts = [
-      { label: current.pattern, correct: true },
-      ...pickDistractors(current, 3, 'pattern').map(p => ({ label: p, correct: false }))
-    ].sort(() => Math.random() - 0.5);
-    renderOpts(opts);
   }
 }
 
@@ -471,19 +564,22 @@ function renderOpts(opts) {
 async function handleAnswer(pick, btn) {
   if (answered) return;
   answered = true;
-  total++;
   const fb = document.getElementById('feedback');
+  const isCorrect = !!pick.correct;
+  srs.recordResult(current.id, isCorrect);
+  session.recordAnswer({
+    id: current.id,
+    correct: isCorrect,
+    label: current.pattern,
+    meaning: current.meaning_en,
+  });
 
-  if (pick.correct) {
-    correct++;
-    srs.recordResult(current.id, true);
+  if (isCorrect) {
     btn.classList.add('correct');
     fb.textContent = '✓ Correct!';
     fb.className = 'correct';
   } else {
-    srs.recordResult(current.id, false);
     btn.classList.add('wrong');
-    // Find button whose text matches correct answer and reveal it.
     const correctOpt = [...document.querySelectorAll('.opt')].find(b => {
       return b.textContent === (mode === 'form-to-meaning' ? current.meaning_en : current.pattern);
     });
@@ -491,7 +587,6 @@ async function handleAnswer(pick, btn) {
     fb.textContent = '✗ Not quite — see coach below';
     fb.className = 'wrong';
 
-    // Fire coach
     const coach = document.getElementById('coach-box');
     coach.classList.add('visible', 'loading');
     coach.innerHTML = '<div class="coach-label">COACH</div>Thinking…';
@@ -501,7 +596,6 @@ async function handleAnswer(pick, btn) {
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);
-  document.getElementById('score').textContent = `${correct} / ${total}`;
   updateStats();
 
   // Example sentence
@@ -522,9 +616,62 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-document.getElementById('next-btn').addEventListener('click', next);
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (session.advance()) next();
+});
+
+// ── Compose submit handler ──
+document.getElementById('compose-submit').addEventListener('click', async () => {
+  if (answered) return;
+  const ta = document.getElementById('compose-input');
+  const learnerJa = (ta.value || '').trim();
+  if (!learnerJa) { ta.focus(); return; }
+  const english = ta.dataset.english || current.meaning_en;
+  const result = document.getElementById('compose-result');
+  result.innerHTML = '<span style="color:#888;">✨ Grading…</span>';
+  const submitBtn = document.getElementById('compose-submit');
+  submitBtn.disabled = true;
+  let g;
+  try {
+    g = await gradeComposition(current, english, learnerJa);
+  } catch (e) {
+    result.innerHTML = '<span style="color:#c62828;">⚠ Grader failed: ' + escapeHtml(e.message || 'unknown') + '</span>';
+    submitBtn.disabled = false;
+    return;
+  }
+  answered = true;
+  const score = Number(g.score) || 0;
+  // Score 1 (partial) counts as correct in SRS but flagged as 'almost' in review.
+  const isCorrect = score >= 1;
+  srs.recordResult(current.id, score === 2);
+  session.recordAnswer({
+    id: current.id,
+    correct: isCorrect,
+    label: current.pattern + (score === 1 ? ' (almost)' : ''),
+    meaning: current.meaning_en,
+    userPick: learnerJa,
+  });
+
+  const badge = score === 2
+    ? '<span style="color:#2e7d32; font-weight:600;">✓ Correct</span>'
+    : score === 1
+      ? '<span style="color:#e65100; font-weight:600;">△ Almost</span>'
+      : '<span style="color:#c62828; font-weight:600;">✗ Off</span>';
+  result.innerHTML = `
+    <div style="background:#f8f8f8; border-radius:8px; padding:10px 12px; line-height:1.55;">
+      <div>${badge}</div>
+      <div style="margin-top:6px;"><strong>You:</strong> ${escapeHtml(learnerJa)}</div>
+      <div style="margin-top:2px;"><strong>Reference:</strong> ${escapeHtml(g.correctVersion || '')}</div>
+      <div style="margin-top:6px; color:#5d4037; font-size:0.88rem;">${escapeHtml(g.feedback || '')}</div>
+    </div>
+  `;
+  ta.disabled = true;
+  updateStats();
+  document.getElementById('next-btn').style.display = 'inline-block';
+});
 
 // Boot
+session.start();
 applyLevel();
 applyMode();
 </script>

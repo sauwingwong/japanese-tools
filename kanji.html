@@ -143,10 +143,10 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
     </div>
   </div>
 
+  <div id="session-hud"></div>
   <div class="card">
     <div class="score-bar">
       <span>Known <strong id="stat-known">0</strong> · Learning <strong id="stat-learning">0</strong> · Struggling <strong id="stat-struggling">0</strong> · Due <strong id="stat-due">0</strong> · New <strong id="stat-new">0</strong></span>
-      <span>Score <strong id="score">0 / 0</strong></span>
     </div>
 
     <div id="question-area"></div>
@@ -155,6 +155,7 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
       <button id="next-btn" style="display:none">Next →</button>
     </div>
   </div>
+  <div id="session-end"></div>
 </main>
 
 <nav class="tabbar-mobile">
@@ -181,8 +182,9 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 })(window);
 </script>
 <script type="module">
-import { createSRS } from '/js/srs.js';
+import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
+import { createSession } from '/js/session.js';
 const askGemini = window.askGemini;
 
 const data = await fetch('/data/kanji-n5n4.json').then(r => r.json());
@@ -192,8 +194,26 @@ const srs = createSRS('n5n4-kanji', { sync: true });
 let level = localStorage.getItem('kanji-level') || 'all';
 let mode = localStorage.getItem('kanji-mode') || 'kanji-to-reading';
 let current = null;
-let answered = false;
-let correct = 0, total = 0;
+const SESSION_LENGTH = 15;
+
+const session = createSession({
+  length: SESSION_LENGTH,
+  hudEl: document.getElementById('session-hud'),
+  endEl: document.getElementById('session-end'),
+  poolSize: () => poolForLevel().length,
+  retention7d: () => srs.retention7d(),
+  onComplete: (s) => {
+    document.querySelector('main .card').style.display = 'none';
+    if (current && current.kanji) {
+      presence.markStudied({ lastItem: current.kanji, lastSlice: 'kanji' });
+    }
+  },
+  onReset: () => {
+    document.querySelector('main .card').style.display = '';
+    session.start();
+    next();
+  },
+});
 
 function poolForLevel() {
   return level === 'all' ? ALL : ALL.filter(k => k.level === level);
@@ -216,7 +236,9 @@ document.querySelectorAll('#filter-bar button').forEach(b => {
     level = b.dataset.level;
     localStorage.setItem('kanji-level', level);
     document.querySelectorAll('#filter-bar button').forEach(x => x.classList.toggle('active', x.dataset.level === level));
-    updateStats(); next();
+    updateStats();
+    document.querySelector('main .card').style.display = '';
+    session.start(); next();
   });
 });
 document.querySelectorAll('#mode-bar button').forEach(b => {
@@ -224,12 +246,17 @@ document.querySelectorAll('#mode-bar button').forEach(b => {
     mode = b.dataset.mode;
     localStorage.setItem('kanji-mode', mode);
     document.querySelectorAll('#mode-bar button').forEach(x => x.classList.toggle('active', x.dataset.mode === mode));
-    next();
+    document.querySelector('main .card').style.display = '';
+    session.start(); next();
   });
 });
 document.getElementById('reset-btn').addEventListener('click', (e) => {
   e.preventDefault();
-  if (confirm('Reset kanji SRS progress?')) { srs.reset(); updateStats(); next(); }
+  if (confirm('Reset kanji SRS progress?')) {
+    srs.reset(); updateStats();
+    document.querySelector('main .card').style.display = '';
+    session.start(); next();
+  }
 });
 
 // Init active buttons from stored level/mode
@@ -341,7 +368,6 @@ function pickDistractors(n, pool, excludeSet) {
 
 // ── Question rendering ──
 async function next() {
-  answered = false;
   const area = document.getElementById('question-area');
   area.innerHTML = '';
   document.getElementById('next-btn').style.display = 'none';
@@ -494,21 +520,23 @@ function renderOptions(grid, opts) {
 }
 
 async function handleAnswer(pick, btn, opts) {
-  if (answered) return;
-  answered = true;
-  total++;
   const fb = document.getElementById('feedback');
+  const isCorrect = !!pick.correct;
+  srs.recordResult(current.kanji, isCorrect);
+  const correctLabel = (opts.find(o => o.correct) || {}).label || '';
+  session.recordAnswer({
+    id: current.kanji,
+    correct: isCorrect,
+    label: current.kanji,
+    meaning: `${correctLabel ? correctLabel + ' — ' : ''}${current.meaning_en}`,
+  });
 
-  if (pick.correct) {
-    correct++;
-    srs.recordResult(current.kanji, true);
+  if (isCorrect) {
     btn.classList.add('correct');
     fb.textContent = '✓ Correct!';
     fb.className = 'correct';
   } else {
-    srs.recordResult(current.kanji, false);
     btn.classList.add('wrong');
-    // Reveal correct option (buttons are in `opts` order within the grid).
     [...document.querySelectorAll('.opt')].forEach((b, i) => {
       if (opts[i] && opts[i].correct) b.classList.add('correct');
     });
@@ -522,7 +550,6 @@ async function handleAnswer(pick, btn, opts) {
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);
-  document.getElementById('score').textContent = `${correct} / ${total}`;
   updateStats();
   document.getElementById('next-btn').style.display = 'inline-block';
 }
@@ -531,9 +558,12 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-document.getElementById('next-btn').addEventListener('click', next);
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (session.advance()) next();
+});
 
 updateStats();
+session.start();
 next();
 </script>
 
