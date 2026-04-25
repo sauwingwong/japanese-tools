@@ -1,0 +1,4 @@
+# Never let CF or browsers cache the SW source — every byte change must
+# reach the browser within seconds so the install/activate path can run.
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
