@@ -253,12 +253,45 @@ export function createSRS(namespace, opts = {}) {
       c.lapses += 1;
       c.ease = Math.max(1.3, c.ease - 0.2);
     }
-    c.due = Date.now() + c.interval * DAY_MS;
+    const now = Date.now();
+    c.due = now + c.interval * DAY_MS;
     c.seen = true;
+    // Additive fields for retention7d() and presence — backwards compatible.
+    c.lastReviewedAt = now;
+    c.lastResult = correct ? 1 : 0;
 
     cards[id] = c;
     save();
     if (wasNew) bumpNewCount();
+  }
+
+  // 7-day retention rate: of cards reviewed in the last 7 days, what fraction
+  // were answered correctly? Returns null if no reviews in window so callers
+  // can hide the metric on day-1.
+  function retention7d() {
+    const cutoff = Date.now() - 7 * DAY_MS;
+    let total = 0, correct = 0;
+    for (const id of Object.keys(cards)) {
+      const c = cards[id];
+      if (!c || typeof c.lastReviewedAt !== 'number') continue;
+      if (c.lastReviewedAt < cutoff) continue;
+      total++;
+      if (c.lastResult === 1) correct++;
+    }
+    if (!total) return null;
+    return correct / total;
+  }
+
+  // The most recent item reviewed, or null. Used by presence to surface
+  // "partner studied 駅 today".
+  function lastStudied() {
+    let bestId = null, bestT = 0;
+    for (const id of Object.keys(cards)) {
+      const c = cards[id];
+      if (!c || typeof c.lastReviewedAt !== 'number') continue;
+      if (c.lastReviewedAt > bestT) { bestT = c.lastReviewedAt; bestId = id; }
+    }
+    return bestId ? { id: bestId, at: bestT } : null;
   }
 
   // Derived difficulty score: higher = should show sooner. Keeps old
@@ -313,5 +346,54 @@ export function createSRS(namespace, opts = {}) {
     };
   }
 
-  return { pickNext, recordResult, getWeight, reset, stats };
+  return { pickNext, recordResult, getWeight, reset, stats, retention7d, lastStudied };
 }
+
+// ── Presence (async co-presence between the two users) ──────────────────
+//
+// Stores a single row per user under namespace='presence' in srs_state via
+// the existing /api/srs PUT. The partner's row is fetched cross-user via
+// /api/srs?ns=presence&all=1 (a small extension to the GET that, only for
+// the presence namespace, returns ALL owners' rows instead of filtering by
+// the caller's email).
+//
+// Shape: { lastStudied: <iso>, lastItem: <string>, lastSlice: <string> }
+//
+// Quietly no-ops if /api/srs is disabled (501), localStorage-only fallback.
+
+const PRESENCE_NS = 'presence';
+
+export const presence = {
+  async markStudied({ lastItem, lastSlice } = {}) {
+    const data = {
+      lastStudied: new Date().toISOString(),
+      lastItem: lastItem || null,
+      lastSlice: lastSlice || null,
+    };
+    try {
+      await fetch('/api/srs', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ namespace: PRESENCE_NS, data, updated_at: data.lastStudied }),
+      });
+    } catch {}
+    // Mirror locally so we can show "you studied X ago" without a network round-trip.
+    try { localStorage.setItem('presence/self', JSON.stringify(data)); } catch {}
+  },
+
+  // Returns the partner's row, or null. Server-side filter excludes the
+  // caller's own row when all=1 is set.
+  async fetchPartner() {
+    try {
+      const res = await fetch(`/api/srs?ns=${PRESENCE_NS}&all=1`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const body = await res.json();
+      // Server returns { rows: [{ owner_email, data, updated_at }, ...] } when all=1.
+      if (!body.rows || !body.rows.length) return null;
+      // Pick the one with the most recent updated_at.
+      body.rows.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+      return body.rows[0].data || null;
+    } catch { return null; }
+  },
+};

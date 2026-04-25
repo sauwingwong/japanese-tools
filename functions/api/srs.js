@@ -73,6 +73,7 @@ function missingEnv(env) {
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const ns = url.searchParams.get('ns');
+  const allFlag = url.searchParams.get('all') === '1';
 
   // Debug: ns=_debug echoes incoming headers so we can see exactly what
   // CF Access (or its absence) is injecting. Safe to leave in — returns
@@ -97,6 +98,30 @@ export async function onRequestGet({ request, env }) {
   if (!email) return Response.json({ error: 'no identity' }, { status: 401 });
 
   if (!ns) return Response.json({ error: 'missing ns' }, { status: 400 });
+
+  // Cross-user read for the `presence` namespace only — async co-presence
+  // between the two learners on this deploy needs to read the *partner's*
+  // row, not just the caller's. The `all=1` flag returns every row under
+  // that namespace EXCEPT the caller's own (so the client gets just the
+  // partner). Restricted to ns='presence' to avoid leaking SRS state.
+  if (allFlag && ns === 'presence') {
+    const q = `${env.SUPABASE_URL}/rest/v1/srs_state`
+      + `?select=owner_email,data,updated_at`
+      + `&namespace=eq.${encodeURIComponent(ns)}`
+      + `&owner_email=neq.${encodeURIComponent(email)}`;
+    let res;
+    try {
+      res = await fetch(q, { headers: supabaseHeaders(env) });
+    } catch (e) {
+      return Response.json({ error: `supabase unreachable: ${e.message}` }, { status: 502 });
+    }
+    if (!res.ok) {
+      const detail = await res.text();
+      return Response.json({ error: 'supabase error', status: res.status, detail }, { status: 502 });
+    }
+    const rows = await res.json();
+    return Response.json({ rows });
+  }
 
   const q = `${env.SUPABASE_URL}/rest/v1/srs_state`
     + `?select=data,updated_at`

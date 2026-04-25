@@ -290,21 +290,8 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
     <!-- populated from data -->
   </div>
 
-  <div id="score-bar">
-    <div>
-      <div class="score-nums">
-        <span id="sc-correct">0</span> / <span id="sc-total">0</span>
-        <span style="font-size:0.75rem; font-weight:400; color:#888; margin-left:6px;" id="sc-pct"></span>
-      </div>
-      <div class="score-sub">Words seen: <span id="sc-seen">0</span> / <span id="sc-pool">0</span></div>
-      <div class="score-sub" id="srs-badge" style="font-size:0.7rem; color:#666; margin-top:2px;"></div>
-    </div>
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <span class="streak" id="sc-streak"></span>
-      <button class="btn btn-outline" id="reset-btn">Reset</button>
-    </div>
-    <div id="progress-bar" style="flex-basis:100%;"><div id="progress-fill"></div></div>
-  </div>
+  <div id="session-hud"></div>
+  <div id="srs-badge" style="font-size:0.7rem; color:#666; margin:6px 4px 0;"></div>
 
   <div id="quiz-card">
     <button id="play-btn" title="Play word (quick, 2.5)">▶</button>
@@ -325,12 +312,7 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
     <button id="next-btn">Next →</button>
   </div>
 
-  <div id="end-screen">
-    <h2 id="end-title">Session Complete!</h2>
-    <div id="end-summary"></div>
-    <div id="review-list"></div>
-    <button class="btn" style="background:#1a237e; color:white; padding:11px 24px;" id="restart-btn">Start Again</button>
-  </div>
+  <div id="session-end"></div>
 
 </div>
 
@@ -416,8 +398,9 @@ header h1 { font-size: 1.3rem; font-weight: 600; }
 })(window);
 </script>
 <script type="module">
-import { createSRS } from '/js/srs.js';
+import { createSRS, presence } from '/js/srs.js';
 import ttsCache from '/js/tts-cache.js';
+import { createSession } from '/js/session.js';
 const askGemini = window.askGemini;
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -623,17 +606,29 @@ function renderSrsBadge() {
     el.textContent = `📅 Due ${s.due} · 🔁 Learning ${s.learning} · 🆕 New ${Math.max(0, s.newPerDay - s.newToday)} · ✓ Known ${s.known}`;
   } catch {}
 }
-let seenWords = new Set();
 let currentWord = null;
 let currentSentence = null; // {ja, en} from Gemini, populated on reveal
-let answered = false;
-let correct = 0;
-let total = 0;
-let streak = 0;
-let wrongWords = [];     // {word, yourAnswer} for review
 let activeCat = localStorage.getItem('quiz/cat') || 'all';
 let activeLevel = localStorage.getItem('quiz/level') || 'all';
 const SESSION_LENGTH = 20;
+
+// Bounded session shell: HUD, streak, progress, end-screen with medal +
+// review list + finish-line ding/confetti. See js/session.js.
+const session = createSession({
+  length: SESSION_LENGTH,
+  hudEl: document.getElementById('session-hud'),
+  endEl: document.getElementById('session-end'),
+  poolSize: () => pool.length,
+  retention7d: () => srs.retention7d(),
+  onComplete: (s) => {
+    document.getElementById('quiz-card').style.display = 'none';
+    // Mark presence so the partner sees what we last studied.
+    if (currentWord && currentWord.word) {
+      presence.markStudied({ lastItem: currentWord.word.h, lastSlice: 'vocab' });
+    }
+  },
+  onReset: () => initPool(),
+});
 
 // Friendly display names for category chips.
 const CAT_LABELS = {
@@ -674,10 +669,8 @@ function rebuildCategoryBar() {
 
 function initPool() {
   pool = applyFilters();
-  seenWords.clear();
-  correct = 0; total = 0; streak = 0; wrongWords = [];
-  updateScore();
-  document.getElementById('end-screen').style.display = 'none';
+  session.start();
+  renderSrsBadge();
   document.getElementById('quiz-card').style.display = 'block';
   if (!pool.length) {
     document.getElementById('feedback-text').textContent = 'No words match this filter.';
@@ -699,9 +692,6 @@ function pickWord() {
 // QUIZ LOGIC
 // ═══════════════════════════════════════════════════════════════════════
 function nextQuestion() {
-  if (total >= SESSION_LENGTH) { showEndScreen(); return; }
-
-  answered = false;
   currentSentence = null;
   document.getElementById('feedback-text').textContent = '';
   document.getElementById('reveal').style.display = 'none';
@@ -710,7 +700,6 @@ function nextQuestion() {
 
   const idx = pickWord();
   currentWord = { word: pool[idx], idx };
-  seenWords.add(pool[idx].h);
 
   // 4 options: correct + 3 distractors (same category preferred)
   const distractors = [];
@@ -740,25 +729,22 @@ function nextQuestion() {
 }
 
 function answerQuestion(btn, isCorrect, chosen) {
-  if (answered) return;
-  answered = true;
-  total++;
-
   const word = currentWord.word;
+  srs.recordResult(word.h, isCorrect);
+  session.recordAnswer({
+    id: word.h,
+    correct: isCorrect,
+    label: word.h,
+    meaning: `【${word.k}】 — ${word.e}`,
+    userPick: chosen && chosen.h,
+  });
 
   if (isCorrect) {
-    correct++;
-    streak++;
-    srs.recordResult(currentWord.word.h, true);
     btn.classList.add('correct');
     document.getElementById('feedback-text').textContent = '✓ Correct!';
     document.getElementById('feedback-text').style.color = '#2e7d32';
   } else {
-    streak = 0;
-    srs.recordResult(currentWord.word.h, false);
     btn.classList.add('wrong');
-    wrongWords.push({ word, yourAnswer: chosen });
-    // Highlight correct
     document.querySelectorAll('.opt').forEach(b => {
       if (b.textContent.startsWith(word.h)) b.classList.add('correct');
     });
@@ -767,7 +753,6 @@ function answerQuestion(btn, isCorrect, chosen) {
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);
-  // Show meaning on all options
   document.querySelectorAll('.opt').forEach(b => {
     const h = b.childNodes[0].textContent.trim();
     const match = pool.find(w => w.h === h);
@@ -775,7 +760,7 @@ function answerQuestion(btn, isCorrect, chosen) {
   });
 
   showReveal(word);
-  updateScore();
+  renderSrsBadge();
   document.getElementById('next-btn').style.display = 'block';
 }
 
@@ -862,46 +847,6 @@ function escapeHTML(s) {
   );
 }
 
-function updateScore() {
-  document.getElementById('sc-correct').textContent = correct;
-  document.getElementById('sc-total').textContent = total;
-  document.getElementById('sc-seen').textContent = seenWords.size;
-  document.getElementById('sc-pool').textContent = pool.length;
-  document.getElementById('sc-pct').textContent = total ? `(${Math.round(correct/total*100)}%)` : '';
-  document.getElementById('sc-streak').textContent = streak >= 3 ? `🔥 ${streak} streak!` : '';
-  document.getElementById('progress-fill').style.width = `${(total / SESSION_LENGTH) * 100}%`;
-  renderSrsBadge();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// END SCREEN
-// ═══════════════════════════════════════════════════════════════════════
-function showEndScreen() {
-  document.getElementById('quiz-card').style.display = 'none';
-  const end = document.getElementById('end-screen');
-  end.style.display = 'block';
-  const pct = Math.round(correct / total * 100);
-  const medal = pct >= 90 ? '🥇' : pct >= 70 ? '🥈' : pct >= 50 ? '🥉' : '💪';
-  document.getElementById('end-title').textContent = `${medal} Session Complete!`;
-  document.getElementById('end-summary').innerHTML =
-    `Score: <strong>${correct} / ${total}</strong> (${pct}%)<br>
-     Unique words seen: <strong>${seenWords.size}</strong><br>
-     ${wrongWords.length === 0 ? '🎉 Perfect session!' : `Words to review: <strong>${wrongWords.length}</strong>`}`;
-
-  const rl = document.getElementById('review-list');
-  if (wrongWords.length) {
-    rl.innerHTML = '<h3>Review these words:</h3>';
-    wrongWords.forEach(({ word }) => {
-      const item = document.createElement('div');
-      item.className = 'review-item';
-      item.innerHTML = `<span class="rw">${word.h}</span><span>【${word.k}】 — ${word.e}</span>`;
-      rl.appendChild(item);
-    });
-  } else {
-    rl.innerHTML = '';
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════════════
 // EVENTS
 // ═══════════════════════════════════════════════════════════════════════
@@ -925,9 +870,9 @@ document.getElementById('play-sentence-btn').addEventListener('click', async () 
     await fetchAndShowSentence(currentWord.word);
   }
 });
-document.getElementById('next-btn').addEventListener('click', nextQuestion);
-document.getElementById('reset-btn').addEventListener('click', () => initPool());
-document.getElementById('restart-btn').addEventListener('click', () => initPool());
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (session.advance()) nextQuestion();
+});
 
 document.getElementById('level-bar').addEventListener('click', e => {
   if (!e.target.classList.contains('cat-btn')) return;
