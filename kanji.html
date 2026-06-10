@@ -293,14 +293,26 @@ async function getExample(k) {
   } catch(e) { console.warn('example failed', e); return null; }
 }
 
+// Instant static coach built from data — no API call, shown immediately.
+function buildStaticCoach(k, wrongPick) {
+  const on = k.on.map(x => katakanaToHiragana(x)).join(', ');
+  const kun = k.kun.filter(r => !r.includes('-')).join(', ');
+  let msg = `${k.kanji} (${k.meaning_en}): `;
+  if (on && kun) msg += `on-yomi ${on}; kun-yomi ${kun}.`;
+  else if (on) msg += `on-yomi ${on}.`;
+  else if (kun) msg += `kun-yomi ${kun}.`;
+  msg += ` You picked "${wrongPick}" — that reading belongs to a different kanji.`;
+  return msg;
+}
+
+// Background Gemini upgrade — replaces static coach when it arrives.
 async function getCoach(k, wrongPick) {
   const prompt = `A JLPT ${k.level} learner was asked to read the kanji "${k.kanji}" (meaning: ${k.meaning_en}). They picked "${wrongPick}". The correct common readings are on: ${k.on.join(', ')||'—'}, kun: ${k.kun.join(', ')||'—'}. In 2-3 short English sentences, explain the mistake and give a quick mnemonic. Plain prose, no markdown.`;
-  try { return await askGemini(prompt, {
+  return await askGemini(prompt, {
     temperature: 0.4,
     cacheKey: 'kanji-coach/' + k.kanji + '/' + wrongPick,
-    ttlDays: 30
-  }); }
-  catch { return `Correct readings — on: ${k.on.join(', ')||'—'}, kun: ${k.kun.join(', ')||'—'}. Meaning: ${k.meaning_en}.`; }
+    ttlDays: 30,
+  });
 }
 
 // ── TTS ──
@@ -485,6 +497,10 @@ async function next() {
 
 async function renderKanjiToReading(area, withSentence) {
   const k = current;
+  // Primary reading (hiragana) — used for Play button so TTS is unambiguous.
+  // Speaking raw kanji like 時 lets TTS pick its own reading (often wrong context).
+  const primaryReading = allReadings(k)[0] || k.kanji;
+
   const disp = document.createElement('div');
   disp.className = 'kanji-display';
   disp.innerHTML = k.kanji + ` <span class="level-tag">${k.level}</span>`;
@@ -493,7 +509,7 @@ async function renderKanjiToReading(area, withSentence) {
   const playWrap = document.createElement('div');
   playWrap.style.cssText = 'text-align:center; margin-bottom:6px;';
   playWrap.innerHTML = '<button class="play-btn">🔊 Play</button>';
-  playWrap.querySelector('button').onclick = () => speak(k.kanji);
+  playWrap.querySelector('button').onclick = () => speak(primaryReading);
   area.appendChild(playWrap);
 
   if (withSentence) {
@@ -639,7 +655,10 @@ async function renderKanjiToReading(area, withSentence) {
       if (usedFallback) return;
       speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
     };
-    try { _kanjiRec.start(); } catch {}
+    // Abort any previous session before starting — prevents "already started" throw.
+    try { _kanjiRec.abort(); } catch {}
+    await new Promise(r => setTimeout(r, 80));
+    try { _kanjiRec.start(); } catch (e) { await runFallback(); }
   });
 }
 
@@ -728,9 +747,13 @@ async function handleAnswer(pick, btn, opts) {
     fb.className = 'wrong';
     const coach = document.getElementById('coach-box');
     coach.classList.add('visible');
-    coach.innerHTML = '<div class="coach-label">COACH</div>Thinking…';
-    const expl = await getCoach(current, pick.label);
-    coach.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(expl);
+    // Show instant static coach from data — no delay, no API call.
+    coach.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(buildStaticCoach(current, pick.label));
+    // Upgrade to Gemini explanation in background (replaces if/when it arrives).
+    getCoach(current, pick.label).then(expl => {
+      const c = document.getElementById('coach-box');
+      if (c && expl) c.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(expl);
+    }).catch(() => {});
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);

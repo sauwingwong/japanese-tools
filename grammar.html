@@ -374,17 +374,20 @@ async function getExamples(pattern) {
 }
 
 // ── Coach (wrong-answer explanation) ──
+// Instant static coach built from data — no API call, shown immediately.
+function buildStaticCoach(pattern, wrongPick) {
+  return `"${pattern.pattern}" (${pattern.form}) means "${pattern.meaning_en}". ` +
+    `"${wrongPick}" is a different pattern — compare the forms carefully.`;
+}
+
+// Background Gemini upgrade — replaces static coach when it arrives.
 async function getCoach(pattern, wrongPick) {
   const prompt = `A Japanese learner (JLPT ${pattern.level}) was asked about the grammar pattern "${pattern.pattern}" (correct meaning: "${pattern.meaning_en}"). They picked the wrong answer: "${wrongPick}". In 2-3 short English sentences, explain why that is wrong and give a tiny memory hook. Plain prose, no markdown.`;
-  try {
-    return await askGemini(prompt, {
-      temperature: 0.4,
-      cacheKey: 'grammar-coach/' + pattern.id + '/' + wrongPick,
-      ttlDays: 30,
-    });
-  } catch (e) {
-    return `The correct meaning is "${pattern.meaning_en}". Your pick was "${wrongPick}" — review the form "${pattern.form}".`;
-  }
+  return await askGemini(prompt, {
+    temperature: 0.4,
+    cacheKey: 'grammar-coach/' + pattern.id + '/' + wrongPick,
+    ttlDays: 30,
+  });
 }
 
 // ── Speech (delegate to phoneme-trainer's pattern: use Gemini TTS via /api/tts) ──
@@ -574,11 +577,15 @@ async function gradeComposition(pattern, english, learnerJa) {
 
 async function next() {
   answered = false;
+  // Abort any in-flight speech recognition so its result doesn't bleed into
+  // the next question's compose textarea or Say-it result div.
+  try { _grammarRec && _grammarRec.abort(); } catch {}
   document.getElementById('feedback').textContent = '';
   document.getElementById('feedback').className = '';
   document.getElementById('coach-box').classList.remove('visible', 'loading');
   document.getElementById('coach-box').innerHTML = '';
   document.getElementById('example').classList.remove('visible');
+  document.getElementById('ex-speak-result').textContent = '';
   document.getElementById('next-btn').style.display = 'none';
   document.getElementById('compose-area').style.display = 'none';
   document.getElementById('compose-result').innerHTML = '';
@@ -677,11 +684,14 @@ async function handleAnswer(pick, btn) {
     fb.className = 'wrong';
 
     const coach = document.getElementById('coach-box');
-    coach.classList.add('visible', 'loading');
-    coach.innerHTML = '<div class="coach-label">COACH</div>Thinking…';
-    const explanation = await getCoach(current, pick.label);
-    coach.classList.remove('loading');
-    coach.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(explanation);
+    coach.classList.add('visible');
+    // Show instant static coach — no delay.
+    coach.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(buildStaticCoach(current, pick.label));
+    // Upgrade to Gemini mnemonic in background (replaces if/when it arrives).
+    getCoach(current, pick.label).then(expl => {
+      const c = document.getElementById('coach-box');
+      if (c && expl) c.innerHTML = '<div class="coach-label">COACH</div>' + escapeHtml(expl);
+    }).catch(() => {});
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);
