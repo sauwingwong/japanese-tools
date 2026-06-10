@@ -52,11 +52,16 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
 @media(max-width:420px){ #options-grid{grid-template-columns:1fr;} }
 .opt { background:#fff; border:2px solid #ddd; border-radius:10px;
   padding:14px; font-size:1.05rem; cursor:pointer; text-align:center;
-  font-family:inherit; color:#222; transition:all 0.12s; }
+  font-family:inherit; color:#222; transition:all 0.12s;
+  display:flex; align-items:center; justify-content:center; gap:8px; }
 .opt:active { transform: scale(0.98); }
 .opt:hover:not(:disabled) { border-color:#6a1b9a; background:#f3e5f5; }
 .opt.correct { border-color:#2e7d32; background:#e8f5e9; color:#2e7d32; font-weight:600; }
 .opt.wrong   { border-color:#c62828; background:#ffebee; color:#c62828; font-weight:600; }
+.opt-play { font-size:0.8rem; opacity:0.45; padding:3px 5px; border-radius:4px;
+  flex-shrink:0; line-height:1; }
+.opt-play:hover { opacity:1; background:rgba(0,0,0,0.07); }
+.opt:disabled .opt-play { pointer-events:none; }
 
 #feedback { margin-top:12px; text-align:center; font-size:0.95rem; min-height:22px; font-weight:500; }
 #feedback.correct { color:#2e7d32; } #feedback.wrong { color:#c62828; }
@@ -290,7 +295,11 @@ async function getExample(k) {
 
 async function getCoach(k, wrongPick) {
   const prompt = `A JLPT ${k.level} learner was asked to read the kanji "${k.kanji}" (meaning: ${k.meaning_en}). They picked "${wrongPick}". The correct common readings are on: ${k.on.join(', ')||'—'}, kun: ${k.kun.join(', ')||'—'}. In 2-3 short English sentences, explain the mistake and give a quick mnemonic. Plain prose, no markdown.`;
-  try { return await askGemini(prompt, { temperature: 0.4 }); }
+  try { return await askGemini(prompt, {
+    temperature: 0.4,
+    cacheKey: 'kanji-coach/' + k.kanji + '/' + wrongPick,
+    ttlDays: 30
+  }); }
   catch { return `Correct readings — on: ${k.on.join(', ')||'—'}, kun: ${k.kun.join(', ')||'—'}. Meaning: ${k.meaning_en}.`; }
 }
 
@@ -357,9 +366,96 @@ async function speak(text, opts) {
   } catch(e) {}
 }
 
+// ── Speech recognition ──
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const _isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+let _kanjiRec = null;
+if (SpeechRecognition) {
+  _kanjiRec = new SpeechRecognition();
+  _kanjiRec.lang = 'ja-JP';
+  _kanjiRec.interimResults = false;
+  _kanjiRec.maxAlternatives = 5;
+}
+function _getSupportedMimeType() {
+  const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac'];
+  for (const t of types) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+async function _recordAndTranscribe(durationMs = 3000) {
+  const mimeType = _getSupportedMimeType();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        try {
+          const res = await fetch('/api/stt', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: base64, mimeType: mimeType || 'audio/webm' })
+          });
+          if (res.redirected || res.headers.get('content-type')?.includes('text/html')) {
+            reject(new Error('Auth session expired — reload the page')); return;
+          }
+          const data = await res.json();
+          if (!res.ok) { reject(new Error(data.error || `STT error ${res.status}`)); return; }
+          resolve(data.transcript || '');
+        } catch (e) { reject(e); }
+      };
+      reader.readAsDataURL(blob);
+    };
+    rec.start();
+    setTimeout(() => { try { rec.stop(); } catch {} }, durationMs);
+  });
+}
+
+async function handleVoiceAnswer(transcript) {
+  const heard = katakanaToHiragana(transcript).replace(/[\s。、！？!?]/g, '');
+  const validReadings = allReadings(current);
+  const isCorrect = validReadings.some(r => heard === r || heard.includes(r) || r.includes(heard));
+
+  srs.recordResult(current.kanji, isCorrect);
+  const correctLabel = validReadings[0] || '';
+  session.recordAnswer({
+    id: current.kanji,
+    correct: isCorrect,
+    label: current.kanji,
+    meaning: `${correctLabel ? correctLabel + ' — ' : ''}${current.meaning_en}`,
+  });
+
+  const fb = document.getElementById('feedback');
+  const speakResult = document.getElementById('kanji-speak-result');
+  if (isCorrect) {
+    if (fb) { fb.textContent = '✓ Correct!'; fb.className = 'correct'; }
+    if (speakResult) speakResult.innerHTML = `<span style="color:#2e7d32;">✓ Great match!</span> <span style="color:#888;">You said: <strong>${escapeHtml(heard)}</strong></span>`;
+    document.querySelectorAll('#options-grid .opt').forEach(b => {
+      if (validReadings.includes(b.querySelector('span')?.textContent)) b.classList.add('correct');
+    });
+  } else {
+    if (fb) { fb.textContent = '✗ Not quite'; fb.className = 'wrong'; }
+    if (speakResult) speakResult.innerHTML = `<span style="color:#c62828;">✗ Not quite.</span> <span style="color:#888;">You said: <strong>${escapeHtml(heard || '(nothing)')}</strong></span>`;
+    document.querySelectorAll('#options-grid .opt').forEach(b => {
+      if (validReadings.includes(b.querySelector('span')?.textContent)) b.classList.add('correct');
+    });
+  }
+  document.querySelectorAll('#options-grid .opt').forEach(b => b.disabled = true);
+  const sb = document.getElementById('kanji-speak-btn');
+  if (sb) sb.disabled = true;
+  updateStats();
+  document.getElementById('next-btn').style.display = 'inline-block';
+}
+
 // ── Helpers ──
 function allReadings(k) {
-  return [...k.on, ...k.kun.map(x => katakanaToHiragana(x))].filter(Boolean);
+  return [...k.on.map(x => katakanaToHiragana(x)), ...k.kun.map(x => katakanaToHiragana(x))].filter(Boolean);
 }
 function katakanaToHiragana(s) {
   return s.replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
@@ -393,6 +489,12 @@ async function renderKanjiToReading(area, withSentence) {
   disp.className = 'kanji-display';
   disp.innerHTML = k.kanji + ` <span class="level-tag">${k.level}</span>`;
   area.appendChild(disp);
+
+  const playWrap = document.createElement('div');
+  playWrap.style.cssText = 'text-align:center; margin-bottom:6px;';
+  playWrap.innerHTML = '<button class="play-btn">🔊 Play</button>';
+  playWrap.querySelector('button').onclick = () => speak(k.kanji);
+  area.appendChild(playWrap);
 
   if (withSentence) {
     const loading = document.createElement('div');
@@ -448,7 +550,7 @@ async function renderKanjiToReading(area, withSentence) {
   // If context mode, correct = specific reading from example
   let correctLabel;
   if (withSentence && current._contextReading) {
-    correctLabel = current._contextReading;
+    correctLabel = katakanaToHiragana(current._contextReading);
   } else {
     const list = allReadings(k);
     correctLabel = list[0] || k.meaning_en;
@@ -474,6 +576,71 @@ async function renderKanjiToReading(area, withSentence) {
   const coach = document.createElement('div');
   coach.id = 'coach-box';
   area.appendChild(coach);
+
+  // Say it aloud
+  const speakSection = document.createElement('div');
+  speakSection.style.cssText = 'margin-top:14px; text-align:center;';
+  const speakBtn = document.createElement('button');
+  speakBtn.id = 'kanji-speak-btn';
+  speakBtn.style.cssText = 'background:#6a1b9a; color:#fff; border:none; border-radius:20px; padding:6px 18px; font-size:0.85rem; cursor:pointer;';
+  speakBtn.textContent = '🎤 Say it aloud';
+  if (!_kanjiRec && !_isMobile) {
+    speakBtn.disabled = true;
+    speakBtn.title = 'Speech recognition requires Chrome';
+    speakBtn.textContent = '🎤 Chrome only';
+  }
+  const speakResult = document.createElement('div');
+  speakResult.id = 'kanji-speak-result';
+  speakResult.style.cssText = 'margin-top:6px; min-height:24px; font-size:0.85rem;';
+  speakSection.appendChild(speakBtn);
+  speakSection.appendChild(speakResult);
+  area.appendChild(speakSection);
+
+  speakBtn.addEventListener('click', async () => {
+    if (!current) return;
+    speakBtn.textContent = '🔴 Listening…';
+    speakBtn.disabled = true;
+    speakResult.innerHTML = '<span style="color:#888;">Listening… say the reading now</span>';
+
+    if (!_kanjiRec && _isMobile) {
+      try {
+        const t = await _recordAndTranscribe(3000);
+        await handleVoiceAnswer(t);
+      } catch (e) {
+        speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`;
+        speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
+      }
+      return;
+    }
+    if (!_kanjiRec) return;
+
+    let usedFallback = false;
+    async function runFallback() {
+      if (usedFallback) return; usedFallback = true;
+      try {
+        const t = await _recordAndTranscribe(3000);
+        await handleVoiceAnswer(t);
+      } catch (e) {
+        speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`;
+        speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
+      }
+    }
+    _kanjiRec.onresult = async (ev) => {
+      const t = Array.from(ev.results[0]).map(r => r.transcript)[0] || '';
+      await handleVoiceAnswer(t);
+      if (!usedFallback) { speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false; }
+    };
+    _kanjiRec.onerror = async (ev) => {
+      if (ev.error === 'network') { await runFallback(); return; }
+      speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${ev.error}</span>`;
+      speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
+    };
+    _kanjiRec.onend = () => {
+      if (usedFallback) return;
+      speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
+    };
+    try { _kanjiRec.start(); } catch {}
+  });
 }
 
 function renderReadingToKanji(area) {
@@ -516,7 +683,21 @@ function renderOptions(grid, opts) {
   opts.forEach(o => {
     const btn = document.createElement('button');
     btn.className = 'opt';
-    btn.textContent = o.label;
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = o.label;
+
+    const playSpan = document.createElement('span');
+    playSpan.className = 'opt-play';
+    playSpan.textContent = '🔊';
+    playSpan.title = 'Play pronunciation';
+    playSpan.addEventListener('click', (e) => {
+      e.stopPropagation();
+      speak(o.label);
+    });
+
+    btn.appendChild(textSpan);
+    btn.appendChild(playSpan);
     btn.addEventListener('click', () => handleAnswer(o, btn, opts));
     grid.appendChild(btn);
   });
@@ -553,6 +734,8 @@ async function handleAnswer(pick, btn, opts) {
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  const sb = document.getElementById('kanji-speak-btn');
+  if (sb) sb.disabled = true;
   updateStats();
   document.getElementById('next-btn').style.display = 'inline-block';
 }

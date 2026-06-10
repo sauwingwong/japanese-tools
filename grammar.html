@@ -178,7 +178,13 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
           style="width:100%; min-height:80px; padding:10px 12px; font-size:1.05rem;
                  border:1.5px solid #c8e6c9; border-radius:8px; font-family:inherit;
                  line-height:1.5; resize:vertical;"></textarea>
-        <div style="text-align:right; margin-top:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <button id="compose-speak-btn"
+            title="Speak your answer — fills the text box"
+            style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:8px;
+                   padding:8px 16px; font-size:0.88rem; color:#1b5e20; cursor:pointer;">
+            🎤 Speak answer
+          </button>
           <button id="compose-submit"
             style="background:#2e7d32; color:#fff; border:none; border-radius:8px;
                    padding:9px 22px; font-size:0.92rem; font-weight:600; cursor:pointer;">
@@ -191,11 +197,16 @@ main { max-width:720px; margin:0 auto; padding:16px; padding-bottom: calc(80px +
       <div id="coach-box"></div>
       <div class="example" id="example">
         <div class="ex-ja" id="ex-ja"></div>
+        <div id="ex-reading" style="font-size:0.78rem; color:#888; margin:-4px 0 4px; display:none;"></div>
         <div class="ex-en" id="ex-en"></div>
         <button id="ex-speak">🔊 Play</button>
         <button id="ex-speak-rich"
                 title="Rich voice (Gemini 3.1) — slower but more expressive"
                 style="margin-left:6px; background:#fffaf0; border:1px solid #ffca28; border-radius:6px; padding:6px 12px; color:#7a5200; cursor:pointer;">✨ Rich</button>
+        <button id="ex-speak-listen"
+                title="Say it aloud — practice your pronunciation"
+                style="margin-left:6px; background:#e8f5e9; border:1px solid #a5d6a7; border-radius:6px; padding:6px 12px; color:#1b5e20; cursor:pointer;">🎤 Say it</button>
+        <div id="ex-speak-result" style="margin-top:6px; font-size:0.82rem; color:#555;"></div>
       </div>
     </div>
 
@@ -338,9 +349,10 @@ const exampleSchema = {
         type: 'object',
         properties: {
           ja: { type: 'string' },
+          reading: { type: 'string' }, // full hiragana reading of ja
           en: { type: 'string' }
         },
-        required: ['ja','en']
+        required: ['ja','reading','en']
       }
     }
   },
@@ -348,7 +360,7 @@ const exampleSchema = {
 };
 
 async function getExamples(pattern) {
-  const prompt = `Write 3 short ${pattern.level}-level Japanese sentences using the grammar pattern "${pattern.pattern}" (meaning: ${pattern.meaning_en}). Use simple JLPT ${pattern.level} vocabulary. Return JSON {sentences: [{ja, en}, ...]}.`;
+  const prompt = `Write 3 short ${pattern.level}-level Japanese sentences using the grammar pattern "${pattern.pattern}" (meaning: ${pattern.meaning_en}). Use simple JLPT ${pattern.level} vocabulary. Return JSON {sentences: [{ja, reading, en}, ...]} where "reading" is the full hiragana pronunciation of each "ja" sentence.`;
   try {
     return await askGemini(prompt, {
       schema: exampleSchema,
@@ -365,8 +377,11 @@ async function getExamples(pattern) {
 async function getCoach(pattern, wrongPick) {
   const prompt = `A Japanese learner (JLPT ${pattern.level}) was asked about the grammar pattern "${pattern.pattern}" (correct meaning: "${pattern.meaning_en}"). They picked the wrong answer: "${wrongPick}". In 2-3 short English sentences, explain why that is wrong and give a tiny memory hook. Plain prose, no markdown.`;
   try {
-    const text = await askGemini(prompt, { temperature: 0.4 });
-    return text;
+    return await askGemini(prompt, {
+      temperature: 0.4,
+      cacheKey: 'grammar-coach/' + pattern.id + '/' + wrongPick,
+      ttlDays: 30,
+    });
   } catch (e) {
     return `The correct meaning is "${pattern.meaning_en}". Your pick was "${wrongPick}" — review the form "${pattern.form}".`;
   }
@@ -435,6 +450,77 @@ async function speak(text, opts) {
       try { playInto(ctx); } catch (err2) { console.warn('TTS retry failed:', err2); }
     }
   } catch (e) { console.warn('TTS failed:', e); }
+}
+
+// ── Speech recognition (STT) ──
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const _isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+let _grammarRec = null;
+if (SpeechRecognition) {
+  _grammarRec = new SpeechRecognition();
+  _grammarRec.lang = 'ja-JP';
+  _grammarRec.interimResults = false;
+  _grammarRec.maxAlternatives = 1;
+}
+function _getSupportedMimeType() {
+  const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac'];
+  for (const t of types) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+async function _recordAndTranscribe(durationMs = 4000) {
+  const mimeType = _getSupportedMimeType();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        try {
+          const res = await fetch('/api/stt', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: base64, mimeType: mimeType || 'audio/webm' })
+          });
+          if (res.redirected || res.headers.get('content-type')?.includes('text/html')) {
+            reject(new Error('Auth session expired — reload')); return;
+          }
+          const data = await res.json();
+          if (!res.ok) { reject(new Error(data.error || `STT ${res.status}`)); return; }
+          resolve(data.transcript || '');
+        } catch (e) { reject(e); }
+      };
+      reader.readAsDataURL(blob);
+    };
+    rec.start();
+    setTimeout(() => { try { rec.stop(); } catch {} }, durationMs);
+  });
+}
+
+// Start listening and return transcript. Works on desktop (WebSpeech) and
+// iOS/Android (Gemini STT fallback).
+async function listenForJapanese(durationMs = 4000) {
+  if (_isMobile || !_grammarRec) {
+    return await _recordAndTranscribe(durationMs);
+  }
+  return new Promise((resolve, reject) => {
+    let usedFallback = false;
+    async function runFallback() {
+      if (usedFallback) return; usedFallback = true;
+      try { resolve(await _recordAndTranscribe(durationMs)); } catch (e) { reject(e); }
+    }
+    _grammarRec.onresult = ev => resolve(ev.results[0]?.[0]?.transcript || '');
+    _grammarRec.onerror = ev => { if (ev.error !== 'aborted') runFallback(); };
+    _grammarRec.onend = () => { if (!usedFallback) resolve(''); };
+    try { _grammarRec.start(); } catch { runFallback(); }
+    setTimeout(() => { try { _grammarRec.stop(); } catch {} }, durationMs + 500);
+  });
 }
 
 // ── Question generation ──
@@ -606,10 +692,35 @@ async function handleAnswer(pick, btn) {
   const s = ex.sentences && ex.sentences[0];
   if (s) {
     document.getElementById('ex-ja').textContent = s.ja;
+    // Show hiragana reading below the Japanese sentence if available.
+    const exReading = document.getElementById('ex-reading');
+    if (s.reading && s.reading !== s.ja) {
+      exReading.textContent = s.reading;
+      exReading.style.display = '';
+    } else {
+      exReading.style.display = 'none';
+    }
     document.getElementById('ex-en').textContent = s.en;
     document.getElementById('example').classList.add('visible');
     document.getElementById('ex-speak').onclick = () => speak(s.ja);
     document.getElementById('ex-speak-rich').onclick = () => speak(s.ja, { model: 'gemini-3.1-flash-tts-preview' });
+    // 🎤 — practice saying the example aloud (no grading, just feedback).
+    const exSpeakBtn = document.getElementById('ex-speak-listen');
+    const exSpeakResult = document.getElementById('ex-speak-result');
+    exSpeakBtn.onclick = async () => {
+      exSpeakBtn.textContent = '🔴 Listening…';
+      exSpeakBtn.disabled = true;
+      exSpeakResult.textContent = '';
+      try {
+        const transcript = await listenForJapanese(4000);
+        exSpeakResult.textContent = transcript ? `You said: ${transcript}` : '(nothing heard)';
+      } catch (e) {
+        exSpeakResult.textContent = `⚠ ${e.message || 'Mic error'}`;
+      } finally {
+        exSpeakBtn.textContent = '🎤 Say it';
+        exSpeakBtn.disabled = false;
+      }
+    };
   }
 
   document.getElementById('next-btn').style.display = 'inline-block';
@@ -671,6 +782,27 @@ document.getElementById('compose-submit').addEventListener('click', async () => 
   ta.disabled = true;
   updateStats();
   document.getElementById('next-btn').style.display = 'inline-block';
+});
+
+// ── Compose speak button ──
+document.getElementById('compose-speak-btn').addEventListener('click', async () => {
+  if (answered) return;
+  const btn = document.getElementById('compose-speak-btn');
+  const ta = document.getElementById('compose-input');
+  btn.textContent = '🔴 Listening…';
+  btn.disabled = true;
+  try {
+    const transcript = await listenForJapanese(5000);
+    if (transcript) ta.value = transcript;
+    ta.focus();
+  } catch (e) {
+    // Show error briefly then restore
+    btn.textContent = `⚠ ${e.message || 'Mic error'}`;
+    await new Promise(r => setTimeout(r, 2000));
+  } finally {
+    btn.textContent = '🎤 Speak answer';
+    btn.disabled = false;
+  }
 });
 
 // Boot
