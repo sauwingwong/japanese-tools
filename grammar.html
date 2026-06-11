@@ -462,6 +462,7 @@ let _grammarRec = null;
 if (SpeechRecognition) {
   _grammarRec = new SpeechRecognition();
   _grammarRec.lang = 'ja-JP';
+  _grammarRec.continuous = true;
   _grammarRec.interimResults = false;
   _grammarRec.maxAlternatives = 1;
 }
@@ -508,21 +509,31 @@ async function _recordAndTranscribe(durationMs = 4000) {
 
 // Start listening and return transcript. Works on desktop (WebSpeech) and
 // iOS/Android (Gemini STT fallback).
+// Desktop: continuous=true so partial pauses mid-sentence don't cut recognition
+// short — we collect all final segments and join them, then stop after durationMs.
 async function listenForJapanese(durationMs = 4000) {
   if (_isMobile || !_grammarRec) {
     return await _recordAndTranscribe(durationMs);
   }
   return new Promise((resolve, reject) => {
     let usedFallback = false;
+    let parts = [];
     async function runFallback() {
       if (usedFallback) return; usedFallback = true;
       try { resolve(await _recordAndTranscribe(durationMs)); } catch (e) { reject(e); }
     }
-    _grammarRec.onresult = ev => resolve(ev.results[0]?.[0]?.transcript || '');
+    _grammarRec.onresult = ev => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) parts.push(ev.results[i][0].transcript);
+      }
+    };
     _grammarRec.onerror = ev => { if (ev.error !== 'aborted') runFallback(); };
-    _grammarRec.onend = () => { if (!usedFallback) resolve(''); };
-    try { _grammarRec.start(); } catch { runFallback(); }
-    setTimeout(() => { try { _grammarRec.stop(); } catch {} }, durationMs + 500);
+    _grammarRec.onend = () => { if (!usedFallback) resolve(parts.join('')); };
+    try { _grammarRec.abort(); } catch {}
+    setTimeout(() => {
+      try { _grammarRec.start(); } catch { runFallback(); return; }
+      setTimeout(() => { try { _grammarRec.stop(); } catch {} }, durationMs);
+    }, 80);
   });
 }
 

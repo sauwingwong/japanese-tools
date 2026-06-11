@@ -466,8 +466,12 @@ async function handleVoiceAnswer(transcript) {
 }
 
 // ── Helpers ──
+// Kun-yomi first: for most N5 vocab the kun reading is the everyday one
+// (水→みず, 火→ひ). Kanji with no kun fall back to on-yomi (百→ひゃく).
 function allReadings(k) {
-  return [...k.on.map(x => katakanaToHiragana(x)), ...k.kun.map(x => katakanaToHiragana(x))].filter(Boolean);
+  const kun = k.kun.map(x => katakanaToHiragana(x)).filter(Boolean);
+  const on  = k.on.map(x => katakanaToHiragana(x)).filter(Boolean);
+  return kun.length > 0 ? [...kun, ...on] : on;
 }
 function katakanaToHiragana(s) {
   return s.replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
