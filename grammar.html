@@ -516,10 +516,10 @@ async function listenForJapanese(durationMs = 4000) {
     return await _recordAndTranscribe(durationMs);
   }
   return new Promise((resolve, reject) => {
-    let usedFallback = false;
-    let parts = [];
+    let parts = [], done = false, started = false;
+    const finish = v => { if (!done) { done = true; resolve(v); } };
     async function runFallback() {
-      if (usedFallback) return; usedFallback = true;
+      if (done) return; done = true;
       try { resolve(await _recordAndTranscribe(durationMs)); } catch (e) { reject(e); }
     }
     _grammarRec.onresult = ev => {
@@ -527,13 +527,16 @@ async function listenForJapanese(durationMs = 4000) {
         if (ev.results[i].isFinal) parts.push(ev.results[i][0].transcript);
       }
     };
-    _grammarRec.onerror = ev => { if (ev.error !== 'aborted') runFallback(); };
-    _grammarRec.onend = () => { if (!usedFallback) resolve(parts.join('')); };
+    // Ignore the 'aborted' error + end event the pre-start abort() emits —
+    // `started` guards against resolving (empty) before we begin listening.
+    _grammarRec.onerror = ev => { if (ev.error === 'aborted' || !started) return; runFallback(); };
+    _grammarRec.onend = () => { if (started) finish(parts.join('')); };
     try { _grammarRec.abort(); } catch {}
     setTimeout(() => {
-      try { _grammarRec.start(); } catch { runFallback(); return; }
+      try { _grammarRec.start(); started = true; }
+      catch { runFallback(); return; }
       setTimeout(() => { try { _grammarRec.stop(); } catch {} }, durationMs);
-    }, 80);
+    }, 120);
   });
 }
 

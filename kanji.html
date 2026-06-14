@@ -429,6 +429,38 @@ async function _recordAndTranscribe(durationMs = 3000) {
   });
 }
 
+// Listen once and return the best transcript. Desktop uses Web Speech;
+// iOS/Android (no Web Speech) fall back to Gemini STT.
+// `started` guard: the abort() we fire before start() emits its own
+// 'aborted' error + end event — without the guard those would resolve the
+// promise (empty) before we ever begin listening. That was the "Say it
+// aloud does nothing" bug.
+async function listenForReading(durationMs = 3000) {
+  if (_isMobile || !_kanjiRec) return await _recordAndTranscribe(durationMs);
+  return new Promise((resolve, reject) => {
+    let best = '', done = false, started = false;
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    async function runFallback() {
+      if (done) return; done = true;
+      try { resolve(await _recordAndTranscribe(durationMs)); } catch (e) { reject(e); }
+    }
+    _kanjiRec.onresult = ev => {
+      best = Array.from(ev.results[0]).map(r => r.transcript)[0] || best;
+    };
+    _kanjiRec.onerror = ev => {
+      if (ev.error === 'aborted' || !started) return;
+      if (ev.error === 'network') runFallback(); else finish(best);
+    };
+    _kanjiRec.onend = () => { if (started) finish(best); };
+    try { _kanjiRec.abort(); } catch {}
+    setTimeout(() => {
+      try { _kanjiRec.start(); started = true; }
+      catch { runFallback(); return; }
+      setTimeout(() => { try { _kanjiRec.stop(); } catch {} }, durationMs);
+    }, 120);
+  });
+}
+
 async function handleVoiceAnswer(transcript) {
   const heard = katakanaToHiragana(transcript).replace(/[\s。、！？!?]/g, '');
   const validReadings = allReadings(current);
@@ -621,48 +653,13 @@ async function renderKanjiToReading(area, withSentence) {
     speakBtn.textContent = '🔴 Listening…';
     speakBtn.disabled = true;
     speakResult.innerHTML = '<span style="color:#888;">Listening… say the reading now</span>';
-
-    if (!_kanjiRec && _isMobile) {
-      try {
-        const t = await _recordAndTranscribe(3000);
-        await handleVoiceAnswer(t);
-      } catch (e) {
-        speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`;
-        speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
-      }
-      return;
-    }
-    if (!_kanjiRec) return;
-
-    let usedFallback = false;
-    async function runFallback() {
-      if (usedFallback) return; usedFallback = true;
-      try {
-        const t = await _recordAndTranscribe(3000);
-        await handleVoiceAnswer(t);
-      } catch (e) {
-        speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`;
-        speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
-      }
-    }
-    _kanjiRec.onresult = async (ev) => {
-      const t = Array.from(ev.results[0]).map(r => r.transcript)[0] || '';
-      await handleVoiceAnswer(t);
-      if (!usedFallback) { speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false; }
-    };
-    _kanjiRec.onerror = async (ev) => {
-      if (ev.error === 'network') { await runFallback(); return; }
-      speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${ev.error}</span>`;
+    try {
+      const t = await listenForReading(3000);
+      await handleVoiceAnswer(t);  // sets feedback + disables button when answered
+    } catch (e) {
+      speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`;
       speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
-    };
-    _kanjiRec.onend = () => {
-      if (usedFallback) return;
-      speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
-    };
-    // Abort any previous session before starting — prevents "already started" throw.
-    try { _kanjiRec.abort(); } catch {}
-    await new Promise(r => setTimeout(r, 80));
-    try { _kanjiRec.start(); } catch (e) { await runFallback(); }
+    }
   });
 }
 
