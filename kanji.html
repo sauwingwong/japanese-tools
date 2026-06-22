@@ -491,8 +491,6 @@ async function handleVoiceAnswer(transcript) {
     });
   }
   document.querySelectorAll('#options-grid .opt').forEach(b => b.disabled = true);
-  const sb = document.getElementById('kanji-speak-btn');
-  if (sb) sb.disabled = true;
   updateStats();
   document.getElementById('next-btn').style.display = 'inline-block';
 }
@@ -655,10 +653,12 @@ async function renderKanjiToReading(area, withSentence) {
     speakResult.innerHTML = '<span style="color:#888;">Listening… say the reading now</span>';
     try {
       const t = await listenForReading(3000);
-      await handleVoiceAnswer(t);  // sets feedback + disables button when answered
+      await handleVoiceAnswer(t);  // sets feedback
     } catch (e) {
       speakResult.innerHTML = `<span style="color:#c62828;">⚠ ${escapeHtml(e.message || 'Mic error')}</span>`;
-      speakBtn.textContent = '🎤 Say it aloud'; speakBtn.disabled = false;
+    } finally {
+      speakBtn.textContent = '🎤 Say it aloud';
+      speakBtn.disabled = false;
     }
   });
 }
@@ -758,8 +758,8 @@ async function handleAnswer(pick, btn, opts) {
   }
 
   document.querySelectorAll('.opt').forEach(b => b.disabled = true);
-  const sb = document.getElementById('kanji-speak-btn');
-  if (sb) sb.disabled = true;
+  // Leave the Say-it-aloud button enabled — pronunciation practice is
+  // independent of the multiple-choice answer.
   updateStats();
   document.getElementById('next-btn').style.display = 'inline-block';
 }
