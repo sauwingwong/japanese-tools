@@ -498,9 +498,13 @@ async function handleVoiceAnswer(transcript) {
 // ── Helpers ──
 // Kun-yomi first: for most N5 vocab the kun reading is the everyday one
 // (水→みず, 火→ひ). Kanji with no kun fall back to on-yomi (百→ひゃく).
+// Exception: number kanji read on-yomi standalone (二→に not ふた,
+// 三→さん not み) — the kun forms only appear in counters (二つ, 三日).
+const ON_FIRST = new Set(['一','二','三','四','五','六','七','八','九','十','百','千','万']);
 function allReadings(k) {
   const kun = k.kun.map(x => katakanaToHiragana(x)).filter(Boolean);
   const on  = k.on.map(x => katakanaToHiragana(x)).filter(Boolean);
+  if (ON_FIRST.has(k.kanji)) return on.length > 0 ? [...on, ...kun] : kun;
   return kun.length > 0 ? [...kun, ...on] : on;
 }
 function katakanaToHiragana(s) {
